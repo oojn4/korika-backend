@@ -47,7 +47,7 @@ jwt = JWTManager(app)
 # Swagger UI configuration
 SWAGGER_URL = '/swagger'
 API_URL = '/static/swagger.yaml'
-swaggerui_blueprint = get_swaggerui_blueprint(SWAGGER_URL, API_URL, config={'app_name': "DiplomatAI"})
+swaggerui_blueprint = get_swaggerui_blueprint(SWAGGER_URL, API_URL, config={'app_name': "CSI Korika"})
 app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
 
 # Model pengguna
