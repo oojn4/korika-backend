@@ -1,215 +1,150 @@
-from datetime import timedelta
-from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from dotenv import load_dotenv
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from flask_cors import CORS
-from flask_swagger_ui import get_swaggerui_blueprint
-import uuid
-import os
-import requests
-from sqlalchemy.sql import text
+
+from sqlalchemy import text
+from flask import Blueprint, current_app, request, jsonify, send_file, send_from_directory
 import pandas as pd
-import numpy as np
 import os
-import urllib.parse
-# Memuat variabel dari file .env
-load_dotenv()
-
-app = Flask(__name__)
-cors = CORS(app, resources={r"/*": {"origins": "*"}})
-
-
-
+from app import db
+from app.models.db_models import MalariaHealthFacilityMonthly,HealthFacilityId
+from werkzeug.utils import secure_filename
 import os
-import urllib.parse
+import tempfile
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
-# Konfigurasi database
-DB_NAME = os.getenv('DB_NAME')
-print(DB_NAME)
-DB_USER = os.getenv('DB_USER')
-DB_PASSWORD = os.getenv('DB_PASSWORD')
-if DB_PASSWORD is not None:
-    DB_PASSWORD = urllib.parse.quote_plus(DB_PASSWORD)
-else:
-    # Handle missing password - either set a default or raise an error
-    raise ValueError("DB_PASSWORD environment variable is not set")
-DB_HOST = os.getenv('DB_HOST')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 's3creeer2312k3wewad!'
 
-db = SQLAlchemy(app)
-jwt = JWTManager(app)
+bp = Blueprint('data', __name__, url_prefix='')
 
-# Swagger UI configuration
-SWAGGER_URL = '/swagger'
-API_URL = '/static/swagger.yaml'
-swaggerui_blueprint = get_swaggerui_blueprint(SWAGGER_URL, API_URL, config={'app_name': "CSI Korika"})
-app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
-# Model pengguna
-class MalariaHealthFacilityMonthly(db.Model):
-    __tablename__ = 'malaria_health_facility_monthly'
-    id_mhfm = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    id_faskes = db.Column(db.Integer, db.ForeignKey('health_facility_id.id_faskes'), nullable=False)
-    bulan = db.Column(db.Integer, nullable=False)
-    tahun = db.Column(db.Integer, nullable=False)
-    konfirmasi_lab_mikroskop = db.Column(db.Integer)
-    konfirmasi_lab_rdt = db.Column(db.Integer)
-    konfirmasi_lab_pcr = db.Column(db.Integer)
-    total_konfirmasi_lab = db.Column(db.Integer)
-    pos_0_1_m = db.Column(db.Integer)
-    pos_0_1_f = db.Column(db.Integer)
-    pos_1_4_m = db.Column(db.Integer)
-    pos_1_4_f = db.Column(db.Integer)
-    pos_5_9_m = db.Column(db.Integer)
-    pos_5_9_f = db.Column(db.Integer)
-    pos_10_14_m = db.Column(db.Integer)
-    pos_10_14_f = db.Column(db.Integer)
-    pos_15_64_m = db.Column(db.Integer)
-    pos_15_64_f = db.Column(db.Integer)
-    pos_diatas_64_m = db.Column(db.Integer)
-    pos_diatas_64_f = db.Column(db.Integer)
-    tot_pos_m = db.Column(db.Integer)
-    tot_pos_f = db.Column(db.Integer)
-    tot_pos = db.Column(db.Integer)
-    kematian_malaria = db.Column(db.Integer)
-    hamil_pos = db.Column(db.Integer)
-    p_pf = db.Column(db.Integer)
-    p_pv = db.Column(db.Integer)
-    p_po = db.Column(db.Integer)
-    p_pm = db.Column(db.Integer)
-    p_pk = db.Column(db.Integer)
-    p_mix = db.Column(db.Integer)
-    p_suspek_pk = db.Column(db.Integer)
-    obat_standar = db.Column(db.Integer)
-    obat_nonprogram = db.Column(db.Integer)
-    obat_primaquin = db.Column(db.Integer)
-    kasus_pe = db.Column(db.Integer)
-    penularan_indigenus = db.Column(db.Integer)
-    penularan_impor = db.Column(db.Integer)
-    penularan_induced = db.Column(db.Integer)
-    relaps = db.Column(db.Integer)
-    indikator_pengobatan_standar = db.Column(db.Integer)
-    indikator_primaquin = db.Column(db.Integer)
-    indikator_kasus_pe = db.Column(db.Integer)
-    status = db.Column(db.String(10), default="actual")
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-class HealthFacilityId(db.Model):
-    __tablename__ = 'health_facility_id'
-
-    id_faskes = db.Column(db.Integer, primary_key=True)
-    provinsi = db.Column(db.String(45), nullable=False)
-    kabupaten = db.Column(db.String(45), nullable=False)
-    kecamatan = db.Column(db.String(45), nullable=False)
-    owner = db.Column(db.String(100))
-    tipe_faskes = db.Column(db.String(100))
-    nama_faskes = db.Column(db.String(100))
-    address = db.Column(db.String(255))
-    url = db.Column(db.Text)
-    lat = db.Column(db.Float)
-    lon = db.Column(db.Float)
-    mhfm = db.relationship('MalariaHealthFacilityMonthly', backref='HealthFacilityId', uselist=False)
-
-class User(db.Model):
-    __tablename__ = 'users'
-
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)
-    full_name = db.Column(db.String(255))
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
-    phone_number = db.Column(db.String(15))
-    address_1 = db.Column(db.String(255))
-    address_2 = db.Column(db.String(255))
-    access_level = db.Column(db.String(50), default='user')
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "email": self.email,
-            "full_name": self.full_name,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "phone_number": self.phone_number,
-            "address_1": self.address_1,
-            "address_2": self.address_2,
-            "access_level": self.access_level
+@bp.route('/upload', methods=['POST'])
+@jwt_required()
+def upload_malaria_data():
+    # Cek user identity
+    current_user_id = get_jwt_identity()
+    
+    # Validasi request body
+    if not request.is_json:
+        return jsonify({'error': 'Request harus berupa JSON'}), 400
+    
+    request_data = request.get_json()
+    
+    if 'data' not in request_data or not isinstance(request_data['data'], list) or not request_data['data']:
+        return jsonify({'error': 'Data tidak ditemukan atau format tidak valid'}), 400
+    
+    excel_data = request_data['data']
+    
+    try:
+        # Hasil proses
+        result = {
+            'health_facility_added': 0,
+            'health_facility_existed': 0,
+            'malaria_data_added': 0,
+            'malaria_data_updated': 0,
+            'errors': []
         }
+        
+        # Proses baris per baris dari data JSON
+        for index, row in enumerate(excel_data):
+            try:
+                # Pastikan kolom yang diperlukan ada
+                required_columns = ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan']
+                missing_columns = [col for col in required_columns if col not in row]
+                
+                if missing_columns:
+                    result['errors'].append(f'Baris ke-{index+1}: Kolom yang diperlukan tidak ditemukan: {missing_columns}')
+                    continue
+                
+                id_faskes = row['id_faskes']
+                bulan = row['bulan']
+                tahun = row['tahun']
+                
+                # Proses HealthFacilityId (pastikan tidak duplikat)
+                existing_facility = HealthFacilityId.query.filter_by(
+                    id_faskes=id_faskes,
+                    provinsi=row['provinsi'],
+                    kabupaten=row['kabupaten'],
+                    kecamatan=row['kecamatan'],
+                    nama_faskes=row.get('nama_faskes')
+                ).first()
+                
+                if not existing_facility:
+                    # Tambahkan fasilitas kesehatan baru
+                    new_facility = HealthFacilityId(
+                        id_faskes=id_faskes,
+                        provinsi=row['provinsi'],
+                        kabupaten=row['kabupaten'],
+                        kecamatan=row['kecamatan'],
+                        owner=row.get('owner'),
+                        tipe_faskes=row.get('tipe_faskes'),
+                        nama_faskes=row.get('nama_faskes'),
+                        address=row.get('address'),
+                        url=row.get('url'),
+                        lat=row.get('lat'),
+                        lon=row.get('lon')
+                    )
+                    
+                    db.session.add(new_facility)
+                    db.session.flush()  # Flush untuk mendapatkan ID yang baru dibuat
+                    result['health_facility_added'] += 1
+                else:
+                    result['health_facility_existed'] += 1
+                
+                # Proses MalariaHealthFacilityMonthly (update jika duplikat)
+                existing_data = MalariaHealthFacilityMonthly.query.filter_by(
+                    id_faskes=id_faskes,
+                    bulan=bulan,
+                    tahun=tahun
+                ).first()
+                
+                # Siapkan data malaria
+                malaria_data = {
+                    'id_faskes': id_faskes,
+                    'bulan': bulan,
+                    'tahun': tahun,
+                    'status': 'actual',  # Pastikan status selalu "actual"
+                }
+                
+                # Tambahkan kolom lain jika tersedia di data JSON
+                for column, value in row.items():
+                    if column not in ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan',
+                                      'owner', 'tipe_faskes', 'nama_faskes', 'address', 'url', 'lat', 'lon']:
+                        # Pastikan kolom ada di model MalariaHealthFacilityMonthly
+                        if hasattr(MalariaHealthFacilityMonthly, column) and value is not None:
+                            malaria_data[column] = value
+                
+                if existing_data:
+                    # Update data yang sudah ada
+                    for key, value in malaria_data.items():
+                        setattr(existing_data, key, value)
+                    result['malaria_data_updated'] += 1
+                else:
+                    # Tambahkan data baru
+                    new_malaria_data = MalariaHealthFacilityMonthly(**malaria_data)
+                    db.session.add(new_malaria_data)
+                    result['malaria_data_added'] += 1
+            
+            except Exception as e:
+                error_msg = f"Error pada baris ke-{index+1}: {str(e)}"
+                result['errors'].append(error_msg)
+        
+        # Commit semua perubahan ke database
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Data berhasil diproses',
+            'result': result
+        }), 200
+        
+    except Exception as e:
+        # Rollback jika terjadi error
+        db.session.rollback()
+        
+        return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
     
-
-@app.route('/signup', methods=['POST'])
-def signup():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-    full_name = data.get('full_name')
-    phone_number = data.get('phone_number')
-    address_1 = data.get('address_1')
-    address_2 = data.get('address_2')
-    access_level = data.get('access_level')
-    
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
-
-    # Cek apakah user sudah ada
-    existing_user = User.query.filter_by(email=email).first()
-    if existing_user:
-        return jsonify({"error": "User already exists"}), 400
-
-    # Hash password
-    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-    
-    # Buat user baru
-    new_user = User(
-        email=email,
-        password=hashed_password,
-        full_name=full_name,
-        phone_number=phone_number,
-        address_1=address_1,
-        address_2=address_2,
-        access_level=access_level,
-    )
-    db.session.add(new_user)
-    db.session.flush()  # Pastikan ID user tersedia sebelum menyimpan relasi
-
-    db.session.commit()
-
-    # Buat access_token
-    access_token = create_access_token(identity={'email': new_user.email}, expires_delta=timedelta(hours=1))
-
-    return jsonify({"message": "Login successful", "access_token": access_token,"user":new_user.to_dict(),"success":True}), 201
-
-@app.route('/signin', methods=['POST'])
-def signin():
-    data = request.json
-    email = data.get('email')
-    password = data.get('password')
-
-    user = User.query.filter_by(email=email).first()
-    if not user or not check_password_hash(user.password, password):
-        return jsonify({"error": "Invalid credentials"}), 401
-    print(user)
-    # Buat token JWT
-    access_token = create_access_token(identity={'username': user.email, 'access_level': user.access_level}, expires_delta=timedelta(hours=1))
-    return jsonify({"message": "Login successful", "access_token": access_token,"user":user.to_dict(),"success":True}), 200
-
-# Middleware untuk memeriksa akses berdasarkan role
-def role_required(required_role):
-    def decorator(func):
-        @jwt_required()
-        def wrapper(*args, **kwargs):
-            identity = get_jwt_identity()
-            if identity.get('role') != required_role:
-                return jsonify({"error": "Access denied"}), 403
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-@app.route('/get-provinces', methods=['GET'])
+@bp.route('/get-provinces', methods=['GET'])
 @jwt_required()
 def get_provinces():
     try:
@@ -221,7 +156,7 @@ def get_provinces():
         GROUP BY
             provinsi
         """)
-        print(query)
+        
         result = db.session.execute(query).fetchall()
         provinces = [row.province for row in result]
         
@@ -230,8 +165,42 @@ def get_provinces():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@bp.route('/get-facilities', methods=['GET'])
+@jwt_required()
+def get_facilities():
+    """Get list of facilities for prediction"""
+    try:
+        province = request.args.get('province', default=None, type=str)
+        kabupaten = request.args.get('kabupaten', default=None, type=str)
+        
+        query = HealthFacilityId.query
+        
+        if province and province != 'TOTAL':
+            query = query.filter_by(provinsi=province)
+        if kabupaten:
+            query = query.filter_by(kabupaten=kabupaten)
+            
+        facilities = query.all()
+        
+        return jsonify({
+            "success": True,
+            "facilities": [{
+                "id_faskes": f.id_faskes,
+                "nama_faskes": f.nama_faskes,
+                "tipe_faskes": f.tipe_faskes,
+                "provinsi": f.provinsi,
+                "kabupaten": f.kabupaten,
+                "kecamatan": f.kecamatan
+            } for f in facilities]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
-@app.route('/get-raw-data', methods=['GET'])
+@bp.route('/get-raw-data', methods=['GET'])
 @jwt_required()
 def get_raw_data():
     try:
@@ -239,8 +208,7 @@ def get_raw_data():
         province = request.args.get('province', default=None, type=str)
         if province == 'TOTAL':
             province = None
-        print('parameter', province)
-
+        
         # SQL query untuk periode saat ini
         current_query = text("""
             SELECT 
@@ -260,18 +228,10 @@ def get_raw_data():
                 mhfm.konfirmasi_lab_mikroskop,
                 mhfm.konfirmasi_lab_rdt,
                 mhfm.konfirmasi_lab_pcr,
-                mhfm.pos_0_1_m,
-                mhfm.pos_0_1_f,
-                mhfm.pos_1_4_m,
-                mhfm.pos_1_4_f,
-                mhfm.pos_5_9_m,
-                mhfm.pos_5_9_f,
-                mhfm.pos_10_14_m,
-                mhfm.pos_10_14_f,
-                mhfm.pos_15_64_m,
-                mhfm.pos_15_64_f,
-                mhfm.pos_diatas_64_m,
-                mhfm.pos_diatas_64_f,
+                mhfm.pos_0_4,
+                mhfm.pos_5_14,
+                mhfm.pos_15_64,
+                mhfm.pos_diatas_64,
                 mhfm.hamil_pos,
                 mhfm.kematian_malaria,
                 mhfm.obat_standar,
@@ -300,19 +260,19 @@ def get_raw_data():
         if province:
             current_query = text(str(current_query) + " AND hfi.provinsi = :province")
             params['province'] = province
-        
-
+        print(current_query)
         # Eksekusi query
         current_data = db.session.execute(current_query, params).fetchall()
         
         # Konversi ke dictionary untuk kemudahan manipulasi
         current_data = [row._asdict() for row in current_data]
+        # print(current_data)
         previous_data_index = {
             (row['id_faskes'], row['year'], row['month']): row
             for row in [row for row in current_data]
         }
 
-                # Hitung perubahan M-to-M dan Y-on-Y
+        # Hitung perubahan M-to-M dan Y-on-Y
         final_data = []
         for row in current_data:
             prev_row = previous_data_index.get((row['id_faskes'], row['year'], row['month'] - 1))
@@ -330,6 +290,7 @@ def get_raw_data():
 
             # Tambahkan hasil yang telah dihitung ke dalam final_data
             final_data.append(row)
+        # print(final_data)
         # Langkah 1: Cari tahun dan bulan terakhir
         max_year_actual = max(row['year'] for row in final_data if row['status'] == 'actual')
         max_month_actual = max(row['month'] for row in final_data if (row['status'] == 'actual')&(row['year'] == max_year_actual))
@@ -342,11 +303,9 @@ def get_raw_data():
             next_year_predicted = max_year_actual
 
         # Filter data untuk hanya bulan terakhir dan unik berdasarkan id_faskes
-        # Langkah 2: Filter data untuk tahun dan bulan terakhir
         filtered_data = [row for row in final_data if row['year'] == next_year_predicted and row['month'] == next_month_predicted and row['status']=='predicted']
         unique_data = []
         seen = set()
-
         for row in filtered_data:
             if row['id_faskes'] not in seen:
                 unique_data.append(row)
@@ -354,11 +313,10 @@ def get_raw_data():
 
         return jsonify({"data": unique_data, "success": True}), 200
 
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/get-aggregate-data', methods=['GET'])
+@bp.route('/get-aggregate-data', methods=['GET'])
 @jwt_required()
 def get_aggregate_data():
     try:
@@ -383,10 +341,10 @@ def get_aggregate_data():
                     SUM(mhfm.konfirmasi_lab_mikroskop) as konfirmasi_lab_mikroskop,
                     SUM(mhfm.konfirmasi_lab_rdt) as konfirmasi_lab_rdt,
                     SUM(mhfm.konfirmasi_lab_pcr) as konfirmasi_lab_pcr,
-                    SUM(mhfm.pos_0_1_m)+SUM(mhfm.pos_0_1_f)+SUM(mhfm.pos_1_4_m)+SUM(mhfm.pos_1_4_f) as pos_0_4,
-                    SUM(mhfm.pos_5_9_m)+SUM(mhfm.pos_5_9_f)+SUM(mhfm.pos_10_14_m)+SUM(mhfm.pos_10_14_f) as pos_5_14,
-                    SUM(mhfm.pos_15_64_m)+SUM(mhfm.pos_15_64_f) as pos_15_64,
-                    SUM(mhfm.pos_diatas_64_m)+SUM(mhfm.pos_diatas_64_f) as pos_diatas_64,
+                    SUM(pos_0_4) as pos_0_4,
+                    SUM(mhfm.pos_5_14) as pos_5_14,
+                    SUM(mhfm.pos_15_64) as pos_15_64,
+                    SUM(mhfm.pos_diatas_64) as pos_diatas_64,
                     SUM(mhfm.hamil_pos) as hamil_pos,
                     SUM(mhfm.kematian_malaria) as kematian_malaria,
                     SUM(mhfm.obat_standar) as obat_standar,
@@ -423,10 +381,10 @@ def get_aggregate_data():
                     SUM(mhfm.konfirmasi_lab_mikroskop) as konfirmasi_lab_mikroskop,
                     SUM(mhfm.konfirmasi_lab_rdt) as konfirmasi_lab_rdt,
                     SUM(mhfm.konfirmasi_lab_pcr) as konfirmasi_lab_pcr,
-                    SUM(mhfm.pos_0_1_m)+SUM(mhfm.pos_0_1_f)+SUM(mhfm.pos_1_4_m)+SUM(mhfm.pos_1_4_f) as pos_0_4,
-                    SUM(mhfm.pos_5_9_m)+SUM(mhfm.pos_5_9_f)+SUM(mhfm.pos_10_14_m)+SUM(mhfm.pos_10_14_f) as pos_5_14,
-                    SUM(mhfm.pos_15_64_m)+SUM(mhfm.pos_15_64_f) as pos_15_64,
-                    SUM(mhfm.pos_diatas_64_m)+SUM(mhfm.pos_diatas_64_f) as pos_diatas_64,
+                    SUM(pos_0_4) as pos_0_4,
+                    SUM(mhfm.pos_5_14) as pos_5_14,
+                    SUM(mhfm.pos_15_64) as pos_15_64,
+                    SUM(mhfm.pos_diatas_64) as pos_diatas_64,
                     SUM(mhfm.hamil_pos) as hamil_pos,
                     SUM(mhfm.kematian_malaria) as kematian_malaria,
                     SUM(mhfm.obat_standar) as obat_standar,
@@ -525,9 +483,3 @@ def get_aggregate_data():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True, host="0.0.0.0", port=5000)
