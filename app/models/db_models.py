@@ -24,6 +24,7 @@ class MalariaHealthFacilityMonthly(db.Model):
     p_pk = db.Column(db.Integer)
     p_mix = db.Column(db.Integer)
     p_suspek_pk = db.Column(db.Integer)
+    kasus_pe = db.Column(db.Integer)
     obat_standar = db.Column(db.Integer)
     obat_nonprogram = db.Column(db.Integer)
     obat_primaquin = db.Column(db.Integer)

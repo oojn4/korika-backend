@@ -32,13 +32,14 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
 
     # Create datetime and sort
     facility_data['date'] = pd.to_datetime(
-        facility_data['tahun'].astype(str) + '-' +
-        facility_data['bulan'].astype(str).str.zfill(2) + '-01'
+        facility_data['year'].astype(str) + '-' +
+        facility_data['month'].astype(str).str.zfill(2) + '-01'
     )
     facility_data = facility_data.sort_values('date')
-
+    print(facility_data)
     # Get last 6 months of data
     last_six_months = facility_data.tail(6).reset_index(drop=True)
+    print(last_six_months)
     if len(last_six_months) < 6:
         print(f"Warning: Only {len(last_six_months)} months of data available for facility {facility_id}")
         print("Padding with previous months' data if available")
@@ -59,7 +60,7 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
         'hujan_hujan_mean', 'hujan_hujan_max', 'hujan_hujan_min',
         'tm_tm_mean', 'tm_tm_max', 'tm_tm_min', 'ss_monthly_mean',
         'ff_x_monthly_mean', 'ddd_x_monthly_mean', 'ff_avg_monthly_mean',
-        'pop_penduduk_kab', 'pop_penduduk_kec'
+        'pop_penduduk_kab'
     ]
 
     # Create prediction data (one by one for each month)
@@ -67,14 +68,15 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
 
     # Use historical window for first prediction
     current_window = last_six_months.copy()
-
+    print(prediction_dates)
     for i, pred_date in enumerate(prediction_dates):
         # Create prediction data for current month
         pred_data = current_window.copy()
-
+        print(pred_data)
         # Make prediction
+        print(trained_model.summary())
         predictions = model_instance.make_predictions(trained_model, pred_data)
-
+        print(predictions)
         # Create prediction result
         pred_result = {
             'date': pred_date,
@@ -85,17 +87,18 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
 
         # Add target predictions
         target_columns = [
-            'konfirmasi_lab_mikroskop', 'konfirmasi_lab_rdt',
-            'prop_kab_pos_0_4', 'prop_kab_pos_5_14', 'prop_kab_pos_15_64',
-            'prop_kab_pos_diatas_64', 'prop_kab_kematian_malaria', 'prop_kab_hamil_pos',
-            'prop_kec_pos_0_4', 'prop_kec_pos_5_14', 'prop_kec_pos_15_64',
-            'prop_kec_pos_diatas_64', 'prop_kec_kematian_malaria', 'prop_kec_hamil_pos',
-            'obat_standar', 'obat_nonprogram', 'obat_primaquin'
+            'konfirmasi_lab_mikroskop', 'konfirmasi_lab_rdt', 'konfirmasi_lab_pcr',
+       'pos_0_4', 'pos_5_14', 'pos_15_64', 'pos_diatas_64', 'hamil_pos',
+       'kematian_malaria', 'obat_standar', 'obat_nonprogram', 'obat_primaquin',
+       'p_pf', 'p_pv', 'p_po', 'p_pm', 'p_pk', 'p_mix', 'p_suspek_pk', 'kasus_pe',
+       'penularan_indigenus', 'penularan_impor', 'penularan_induced', 'relaps'
         ]
 
         for j, col in enumerate(target_columns):
-            pred_result[col] = float(predictions[0][j])  # Convert to float for JSON serialization
-
+            pred_result[col] = int(round((predictions[0][j])))  # Convert to float for JSON serialization
+        pred_result['total_konfirmasi_lab'] = int(round(pred_result['konfirmasi_lab_mikroskop'])) + int(round(pred_result['konfirmasi_lab_rdt'])) + int(round(pred_result['konfirmasi_lab_pcr']))
+        pred_result['tot_pos'] = int(round(pred_result['pos_0_4'])) + int(round(pred_result['pos_5_14'])) + int(round(pred_result['pos_15_64'])) + int(round(pred_result['pos_diatas_64']))
+        
         all_predictions.append(pred_result)
 
         # Update window for next prediction:
@@ -105,11 +108,11 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
         new_pred_record['date'] = pred_date
         new_pred_record['tahun'] = pred_date.year
         new_pred_record['bulan'] = pred_date.month
-
+                
         # Copy predicted values
         for j, col in enumerate(target_columns):
             new_pred_record[col] = predictions[0][j]
-
+        
         # Remove oldest record and add newest
         current_window = current_window.iloc[1:].copy()
         current_window = pd.concat([current_window, pd.DataFrame([new_pred_record])], ignore_index=True)
@@ -183,65 +186,64 @@ def get_model_data_from_db():
     """Query database to get data needed for model training"""
     # Sesuaikan query agar sesuai dengan struktur data Excel terbaru
     query = text("""
-    WITH weather_data AS (
-        SELECT 
-            mhfm.id_faskes,
-            mhfm.bulan,
-            mhfm.tahun,
-            AVG(wd.hujan_mean) as hujan_hujan_mean,
-            MAX(wd.hujan_max) as hujan_hujan_max,
-            MIN(wd.hujan_min) as hujan_hujan_min,
-            AVG(wd.tm_mean) as tm_tm_mean,
-            MAX(wd.tm_max) as tm_tm_max,
-            MIN(wd.tm_min) as tm_tm_min,
-            AVG(wd.ss_mean) as ss_monthly_mean,
-            AVG(wd.ff_x_mean) as ff_x_monthly_mean,
-            AVG(wd.ddd_x_mean) as ddd_x_monthly_mean,
-            AVG(wd.ff_avg) as ff_avg_monthly_mean
-        FROM 
-            malaria_health_facility_monthly mhfm
-        JOIN 
-            health_facility_id hfi ON mhfm.id_faskes = hfi.id_faskes
-        LEFT JOIN 
-            weather_data wd ON wd.kabupaten = hfi.kabupaten AND 
-                            wd.bulan = mhfm.bulan AND 
-                            wd.tahun = mhfm.tahun
-        GROUP BY
-            mhfm.id_faskes, mhfm.bulan, mhfm.tahun
-    ),
-    population_data AS (
-        SELECT 
-            mhfm.id_faskes,
-            mhfm.bulan,
-            mhfm.tahun,
-            pd.population_kab as pop_penduduk_kab,
-            pd.population_kec as pop_penduduk_kec
-        FROM 
-            malaria_health_facility_monthly mhfm
-        JOIN 
-            health_facility_id hfi ON mhfm.id_faskes = hfi.id_faskes
-        LEFT JOIN 
-            population_data pd ON pd.kabupaten = hfi.kabupaten AND
-                                pd.kecamatan = hfi.kecamatan AND
-                                pd.tahun = mhfm.tahun
-        GROUP BY
-            mhfm.id_faskes, mhfm.bulan, mhfm.tahun, pd.population_kab, pd.population_kec
-    )
-    SELECT 
-        mhfm.id_faskes,
-        mhfm.bulan,
-        mhfm.tahun,
-        -- Semua kolom yang diperlukan untuk model
-        -- Sesuaikan berdasarkan data Excel terbaru
-        ...
-    FROM 
-        malaria_health_facility_monthly mhfm
-    JOIN 
-        weather_data w ON mhfm.id_faskes = w.id_faskes AND mhfm.bulan = w.bulan AND mhfm.tahun = w.tahun
-    JOIN 
-        population_data p ON mhfm.id_faskes = p.id_faskes AND mhfm.bulan = p.bulan AND mhfm.tahun = p.tahun
-    WHERE
-        mhfm.status = 'actual'
+    
+            SELECT 
+                hfi.provinsi AS province,
+                hfi.kabupaten AS city,
+                hfi.kecamatan AS district,
+                mhfm.tahun AS year,
+                mhfm.bulan AS month,
+                hfi.id_faskes,
+                hfi.nama_faskes,
+                hfi.tipe_faskes,
+                hfi."owner",
+                hfi.lat,
+                hfi.lon,
+                hfi.url,
+                mhfm.tot_pos,
+                mhfm.konfirmasi_lab_mikroskop,
+                mhfm.konfirmasi_lab_rdt,
+                mhfm.konfirmasi_lab_pcr,
+                mhfm.pos_0_4,
+                mhfm.pos_5_14,
+                mhfm.pos_15_64,
+                mhfm.pos_diatas_64,
+                mhfm.hamil_pos,
+                mhfm.kematian_malaria,
+                mhfm.obat_standar,
+                mhfm.obat_nonprogram,
+                mhfm.obat_primaquin,
+                mhfm.p_pf,
+                mhfm.p_pv,
+                mhfm.p_po,
+                mhfm.p_pm,
+                mhfm.p_pk,
+                mhfm.p_mix,
+                mhfm.p_suspek_pk,
+                mhfm.kasus_pe,
+                mhfm.penularan_indigenus,
+                mhfm.penularan_impor,
+                mhfm.penularan_induced,
+                mhfm.relaps,
+                mhfm.hujan_hujan_mean,
+                mhfm.hujan_hujan_max,
+                mhfm.hujan_hujan_min,
+                mhfm.tm_tm_mean,
+                mhfm.tm_tm_max,
+                mhfm.tm_tm_min,
+                mhfm.ss_monthly_mean,
+                mhfm.ff_x_monthly_mean,
+                mhfm.ddd_x_monthly_mean,
+                mhfm.ff_avg_monthly_mean,
+                mhfm.pop_penduduk_kab
+            FROM 
+                malaria_health_facility_monthly mhfm
+            JOIN 
+                health_facility_id hfi
+            ON 
+                mhfm.id_faskes = hfi.id_faskes
+            WHERE
+                mhfm.status = 'actual'
     """)
     
     try:
@@ -251,6 +253,7 @@ def get_model_data_from_db():
     except Exception as e:
         print(f"Error getting data from database: {e}")
         return None
+    
 def train_or_load_model():
     """Load existing model or train a new one if necessary"""
     model_path = os.path.join(current_app.config['MODELS_FOLDER'], 'best_model.keras')
@@ -272,6 +275,8 @@ def train_or_load_model():
     else:
         # Get data for model training
         df = get_model_data_from_db()
+        print(df)
+
         if df is None or len(df) == 0:
             print("No data available for model training")
             return None, None, False
@@ -284,8 +289,10 @@ def train_or_load_model():
             window_len=current_app.config['ML_WINDOW_LENGTH'],
             batch_size=current_app.config['ML_BATCH_SIZE']
         )
+        print(model_instance)
+        print(df.columns)
         model, _, n_features, n_targets = model_instance.train_model(df, epochs=current_app.config['ML_EPOCHS'])  
-        
+        print(n_features)
         # Save model and scalers
         model.save(model_path)
         scalers = {

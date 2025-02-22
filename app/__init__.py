@@ -35,12 +35,12 @@ def create_app():
     # Register routes
     with app.app_context():
         # Import routes
-        from app.routes import auth, data, prediction
+        from app.routes import auth, data, ml
         
         # Register blueprints
         app.register_blueprint(auth.bp)
         app.register_blueprint(data.bp)
-        app.register_blueprint(prediction.bp)
+        app.register_blueprint(ml.bp)
         
         # Create database tables
         db.create_all()
