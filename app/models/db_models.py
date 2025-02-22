@@ -120,7 +120,24 @@ class HealthFacilityId(db.Model):
     lat = db.Column(db.Float)
     lon = db.Column(db.Float)
     mhfm = db.relationship('MalariaHealthFacilityMonthly', backref='HealthFacilityId', uselist=False)
-
+    def to_dict(self):
+        """
+        Convert the HealthFacilityId object to a dictionary.
+        This method is useful for JSON serialization.
+        """
+        return {
+            'id_faskes': self.id_faskes,
+            'provinsi': self.provinsi,
+            'kabupaten': self.kabupaten,
+            'kecamatan': self.kecamatan,
+            'owner': self.owner,
+            'tipe_faskes': self.tipe_faskes,
+            'nama_faskes': self.nama_faskes,
+            'address': self.address,
+            'url': self.url,
+            'lat': self.lat,
+            'lon': self.lon
+        }
 
 class User(db.Model):
     __tablename__ = 'users'

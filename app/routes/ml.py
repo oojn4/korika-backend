@@ -55,6 +55,10 @@ def train_model():
 def predict():
     """Generate 6-month predictions for a facility"""
     try:
+        
+        identity = get_jwt_identity()
+        if identity.get('access_level') != 'admin':
+            return jsonify({"error": "You do not have permission to perform this action"}), 403
         data = request.json
         facility_id = data.get('facility_id')
         
@@ -215,6 +219,9 @@ def predict_all_facilities():
     """Generate 6-month predictions for all facilities"""
     try:
         # Load or train model
+        identity = get_jwt_identity()
+        if identity.get('access_level') != 'admin':
+            return jsonify({"error": "You do not have permission to perform this action"}), 403
         model, model_instance, success = train_or_load_model()
         
         if not success:
