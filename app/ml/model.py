@@ -29,7 +29,7 @@ class MultivariateTimeSeriesLSTM:
         """
         feature_columns = [
             'hujan_hujan_mean','hujan_hujan_max', 'hujan_hujan_min',
-            'tm_tm_mean', 'tm_tm_max', 'tm_tm_min','ss_monthly_mean',
+            'tm_tm_mean', 'tm_tm_max', 'tm_tm_min','ss_monthly_mean', 'rh_mean','rh_min','rh_max',
             'ff_x_monthly_mean', 'ddd_x_monthly_mean', 'ff_avg_monthly_mean',
             'pop_penduduk_kab'
         ]
@@ -201,7 +201,7 @@ class MultivariateTimeSeriesLSTM:
         # Prepare features
         feature_columns = [
             'hujan_hujan_mean','hujan_hujan_max', 'hujan_hujan_min',
-            'tm_tm_mean', 'tm_tm_max', 'tm_tm_min','ss_monthly_mean',
+            'tm_tm_mean', 'tm_tm_max', 'tm_tm_min','ss_monthly_mean', 'rh_mean','rh_min','rh_max',
             'ff_x_monthly_mean', 'ddd_x_monthly_mean', 'ff_avg_monthly_mean',
             'pop_penduduk_kab'
         ]

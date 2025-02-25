@@ -58,7 +58,7 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
     # Feature columns
     feature_columns = [
         'hujan_hujan_mean', 'hujan_hujan_max', 'hujan_hujan_min',
-        'tm_tm_mean', 'tm_tm_max', 'tm_tm_min', 'ss_monthly_mean',
+        'tm_tm_mean', 'tm_tm_max', 'tm_tm_min', 'ss_monthly_mean', 'rh_mean','rh_min','rh_max',   
         'ff_x_monthly_mean', 'ddd_x_monthly_mean', 'ff_avg_monthly_mean',
         'pop_penduduk_kab'
     ]
@@ -235,6 +235,7 @@ def get_model_data_from_db():
                 mhfm.ff_x_monthly_mean,
                 mhfm.ddd_x_monthly_mean,
                 mhfm.ff_avg_monthly_mean,
+                mhfm.rh_mean,mhfm.rh_min,mhfm.rh_max,
                 mhfm.pop_penduduk_kab
             FROM 
                 malaria_health_facility_monthly mhfm

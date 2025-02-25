@@ -45,6 +45,9 @@ class MalariaHealthFacilityMonthly(db.Model):
     tm_tm_mean = db.Column(db.Float)  # Mean temperature
     tm_tm_max = db.Column(db.Float)  # Maximum temperature
     tm_tm_min = db.Column(db.Float)  # Minimum temperature
+    rh_mean = db.Column(db.Float)  # Mean RH
+    rh_max = db.Column(db.Float)  # Maximum RH
+    rh_min  = db.Column(db.Float)  # Minimum RH
     ss_monthly_mean = db.Column(db.Float)  # Mean sunshine duration
     ff_x_monthly_mean = db.Column(db.Float)  # Mean maximum wind speed
     ddd_x_monthly_mean = db.Column(db.Float)  # Mean wind direction
@@ -96,6 +99,9 @@ class MalariaHealthFacilityMonthly(db.Model):
             "tm_tm_mean": self.tm_tm_mean,
             "tm_tm_max": self.tm_tm_max,
             "tm_tm_min": self.tm_tm_min,
+            "rh_mean": self.rh_mean,
+            "rh_max": self.rh_max,
+            "rh_min": self.rh_min,
             "ss_monthly_mean": self.ss_monthly_mean,
             "ff_x_monthly_mean": self.ff_x_monthly_mean,
             "ddd_x_monthly_mean": self.ddd_x_monthly_mean,
