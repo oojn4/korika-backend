@@ -35,7 +35,7 @@ def upload_malaria_data():
         return jsonify({'error': 'Data tidak ditemukan atau format tidak valid'}), 400
     
     excel_data = request_data['data']
-    
+    print(excel_data)
     try:
         # Hasil proses
         result = {
@@ -108,12 +108,29 @@ def upload_malaria_data():
                 }
                 
                 # Tambahkan kolom lain jika tersedia di data JSON
+                # Add validation for data types
                 for column, value in row.items():
                     if column not in ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan',
-                                      'owner', 'tipe_faskes', 'nama_faskes', 'address', 'url', 'lat', 'lon']:
+                                    'owner', 'tipe_faskes', 'nama_faskes', 'address', 'url', 'lat', 'lon']:
                         # Pastikan kolom ada di model MalariaHealthFacilityMonthly
                         if hasattr(MalariaHealthFacilityMonthly, column) and value is not None:
-                            malaria_data[column] = value
+                            # Add type checking here
+                            column_type = MalariaHealthFacilityMonthly.__table__.columns[column].type.python_type
+                            try:
+                                # Cast value to appropriate type
+                                if column_type == float:
+                                    malaria_data[column] = float(value)
+                                elif column_type == int:
+                                    malaria_data[column] = int(value)
+                                elif column_type == str:
+                                    malaria_data[column] = str(value)
+                                else:
+                                    malaria_data[column] = value
+                            except (ValueError, TypeError):
+                                # Handle type conversion errors
+                                error_msg = f"Error konversi tipe data untuk kolom {column}: nilai '{value}' tidak valid untuk tipe {column_type.__name__}"
+                                result['errors'].append(error_msg)
+                                continue
                 
                 if existing_data:
                     # Update data yang sudah ada
@@ -125,7 +142,7 @@ def upload_malaria_data():
                     new_malaria_data = MalariaHealthFacilityMonthly(**malaria_data)
                     db.session.add(new_malaria_data)
                     result['malaria_data_added'] += 1
-            
+                print(result)
             except Exception as e:
                 error_msg = f"Error pada baris ke-{index+1}: {str(e)}"
                 result['errors'].append(error_msg)
@@ -141,8 +158,10 @@ def upload_malaria_data():
     except Exception as e:
         # Rollback jika terjadi error
         db.session.rollback()
-        
+        print(str(e))
         return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
+    finally:
+        db.session.close()
     
 @bp.route('/get-provinces', methods=['GET'])
 @jwt_required()
@@ -164,6 +183,8 @@ def get_provinces():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.close()
 
 @bp.route('/get-facilities', methods=['GET'])
 @jwt_required()
@@ -199,6 +220,8 @@ def get_facilities():
             "success": False,
             "error": str(e)
         }), 500
+    finally:
+        db.session.close()
 
 @bp.route('/get-raw-data', methods=['GET'])
 @jwt_required()
@@ -315,6 +338,8 @@ def get_raw_data():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.close()
 
 @bp.route('/get-aggregate-data', methods=['GET'])
 @jwt_required()
@@ -483,3 +508,5 @@ def get_aggregate_data():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.close()

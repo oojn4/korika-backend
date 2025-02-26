@@ -45,10 +45,17 @@ def signup():
     db.session.commit()
 
     # Buat access_token
-    access_token = create_access_token(identity={'email': new_user.email}, expires_delta=timedelta(hours=1))
+    try:
+        access_token = create_access_token(identity={'email': new_user.email}, expires_delta=timedelta(hours=1))
 
-    return jsonify({"message": "Login successful", "access_token": access_token,"user":new_user.to_dict(),"success":True}), 201
-
+        return jsonify({"message": "Login successful", "access_token": access_token,"user":new_user.to_dict(),"success":True}), 201
+    except Exception as e:
+        return jsonify({"error": "Failed to create user", "message": str(e)}), 500
+    
+    finally:
+        db.session.close()
+    
+    
 @bp.route('/signin', methods=['POST'])
 def signin():
     data = request.json

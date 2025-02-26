@@ -91,9 +91,9 @@ def predict():
         # plot_url = generate_prediction_plots(predictions_df)
         
         # Save predictions to CSV
-        result_filename = f'prediksi_6_bulan_faskes_{actual_facility_id}.csv'
-        result_path = os.path.join(current_app.config['RESULT_FOLDER'], result_filename)
-        predictions_df.to_csv(result_path, index=False)
+        # result_filename = f'prediksi_6_bulan_faskes_{actual_facility_id}.csv'
+        # result_path = os.path.join(current_app.config['RESULT_FOLDER'], result_filename)
+        # predictions_df.to_csv(result_path, index=False)
         
         # Insert predictions into database
         insert_predictions_to_db(predictions_df)
@@ -103,7 +103,7 @@ def predict():
             "facility_id": actual_facility_id,
             "predictions": predictions_df.to_dict('records'),
             # "plot_url": plot_url,
-            "filename": result_filename
+            # "filename": result_filename
         }), 200
         
     except Exception as e:
@@ -212,6 +212,8 @@ def insert_predictions_to_db(predictions_df):
         db.session.rollback()
         print(f"Error inserting predictions to database: {e}")
         return False
+    finally:
+        db.session.close()
     
 @bp.route('/predict-all', methods=['POST'])
 @jwt_required()
@@ -258,9 +260,9 @@ def predict_all_facilities():
                 predictions_df, actual_facility_id = predict_six_months_ahead(model_instance, model, df, facility_id)
                 
                 # Save predictions to CSV
-                result_filename = f'prediksi_6_bulan_faskes_{actual_facility_id}.csv'
-                result_path = os.path.join(current_app.config['RESULT_FOLDER'], result_filename)
-                predictions_df.to_csv(result_path, index=False)
+                # result_filename = f'prediksi_6_bulan_faskes_{actual_facility_id}.csv'
+                # result_path = os.path.join(current_app.config['RESULT_FOLDER'], result_filename)
+                # predictions_df.to_csv(result_path, index=False)
                 
                 # Insert predictions into database
                 success = insert_predictions_to_db(predictions_df)
@@ -270,7 +272,7 @@ def predict_all_facilities():
                     all_predictions.append({
                         "facility_id": facility_id,
                         "predictions_count": len(predictions_df),
-                        "filename": result_filename
+                        # "filename": result_filename
                     })
                 else:
                     failed_facilities.append(facility_id)

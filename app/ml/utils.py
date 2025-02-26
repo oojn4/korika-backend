@@ -254,6 +254,9 @@ def get_model_data_from_db():
     except Exception as e:
         print(f"Error getting data from database: {e}")
         return None
+    finally:
+        db.session.close()
+
     
 def train_or_load_model():
     """Load existing model or train a new one if necessary"""

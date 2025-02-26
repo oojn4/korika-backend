@@ -38,6 +38,8 @@ class BaseCRUDService:
         except SQLAlchemyError as e:
             db.session.rollback()
             return None, str(e)
+        finally:
+            db.session.close()
 
     def update(self, id_field, id_value, data):
         """Update an existing record."""
@@ -69,6 +71,9 @@ class BaseCRUDService:
         except SQLAlchemyError as e:
             db.session.rollback()
             return False, str(e)
+        
+        finally:
+            db.session.close()
 
     def filter_by(self, **kwargs):
         """Filter records based on provided criteria."""
