@@ -14,6 +14,44 @@ def get_all_malaria():
         return jsonify({"success": False, "error": error}), 400
     return jsonify({"success": True, "data": data}), 200
 
+@malaria_bp.route('/malaria/paginated', methods=['GET'])
+@jwt_required()
+def get_paginated_malaria():
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    month = request.args.get('month', type=int)
+    year = request.args.get('year', type=int)
+    status = request.args.get('status', type=str)
+    sort_by = request.args.get('sort_by', 'id_mhfm')
+    sort_order = request.args.get('sort_order', 'asc')
+    
+    # Get filter parameters (can be extended based on your needs)
+    filter_params = {}
+    for key in request.args:
+        if key in ['id_faskes', 'provinsi', 'kabupaten', 'kecamatan', 'tipe_faskes','status']:
+            filter_params[key] = request.args.get(key)
+    
+    data, meta, error = malaria_service.get_paginated(
+        page=page,
+        per_page=per_page,
+        month=month,
+        year=year,
+        status=status,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        filters=filter_params
+    )
+    
+    if error:
+        return jsonify({"success": False, "error": error}), 400
+    
+    return jsonify({
+        "success": True, 
+        "data": data,
+        "meta": meta
+    }), 200
+
 @malaria_bp.route('/malaria/<int:id_mhfm>', methods=['GET'])
 @jwt_required()
 def get_malaria_by_id(id_mhfm):

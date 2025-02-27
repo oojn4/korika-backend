@@ -1,7 +1,8 @@
 from app import db
 from sqlalchemy.exc import SQLAlchemyError
 from app.models import MalariaHealthFacilityMonthly, HealthFacilityId, User
-
+from sqlalchemy import desc, asc, or_, and_
+from datetime import datetime
 class BaseCRUDService:
     """
     Base class for CRUD operations providing common functionality.
@@ -17,7 +18,126 @@ class BaseCRUDService:
             return [record.to_dict() if hasattr(record, 'to_dict') else record for record in records], None
         except SQLAlchemyError as e:
             return None, str(e)
-
+            
+    def get_paginated(self, page=1, per_page=10, month=None, year=None, status=None, sort_by='id_mhfm', sort_order='asc', filters=None):
+        try:
+            # Start with base query that joins with facility table to get location data
+            query = db.session.query(MalariaHealthFacilityMonthly).join(
+                HealthFacilityId, 
+                MalariaHealthFacilityMonthly.id_faskes == HealthFacilityId.id_faskes
+            )
+            
+            # Determine status value (default to 'actual' if not provided)
+            if status is None:
+                if filters and 'status' in filters and filters['status']:
+                    status = filters['status']
+                else:
+                    status = 'actual'  # Default status
+            
+            # Get default values for month and year if not provided,
+            # specifically matching the requested status
+            if month is None or year is None:
+                # Find the latest record with the given status
+                latest_record_with_status = MalariaHealthFacilityMonthly.query.filter(
+                    MalariaHealthFacilityMonthly.status == status
+                ).order_by(
+                    desc(MalariaHealthFacilityMonthly.tahun),
+                    desc(MalariaHealthFacilityMonthly.bulan)
+                ).first()
+                
+                if latest_record_with_status:
+                    # We found a record with the requested status
+                    month = month or latest_record_with_status.bulan
+                    year = year or latest_record_with_status.tahun
+                    print(f"Found latest record with status '{status}': {month}/{year}")
+                else:
+                    # If no records with requested status, try getting the latest record of any status
+                    latest_record = MalariaHealthFacilityMonthly.query.order_by(
+                        desc(MalariaHealthFacilityMonthly.tahun),
+                        desc(MalariaHealthFacilityMonthly.bulan)
+                    ).first()
+                    
+                    if latest_record:
+                        month = month or latest_record.bulan
+                        year = year or latest_record.tahun
+                        print(f"No records with status '{status}', using latest record: {month}/{year}")
+                    else:
+                        # If no records at all, default to current month and year
+                        current_date = datetime.now()
+                        month = month or current_date.month
+                        year = year or current_date.year
+                        print(f"No records found, using current date: {month}/{year}")
+            
+            # 1. Apply all filters first
+            
+            # Start with basic filters (month, year, status)
+            filter_conditions = [
+                MalariaHealthFacilityMonthly.bulan == month,
+                MalariaHealthFacilityMonthly.tahun == year,
+                MalariaHealthFacilityMonthly.status == status
+            ]
+            
+            # Apply additional filters from filter_params
+            if filters:
+                # Filter by health facility ID
+                if 'id_faskes' in filters and filters['id_faskes']:
+                    filter_conditions.append(MalariaHealthFacilityMonthly.id_faskes == int(filters['id_faskes']))
+                
+                # Filter by location (province, district, subdistrict)
+                if 'provinsi' in filters and filters['provinsi']:
+                    filter_conditions.append(HealthFacilityId.provinsi == filters['provinsi'])
+                
+                if 'kabupaten' in filters and filters['kabupaten']:
+                    filter_conditions.append(HealthFacilityId.kabupaten == filters['kabupaten'])
+                
+                if 'kecamatan' in filters and filters['kecamatan']:
+                    filter_conditions.append(HealthFacilityId.kecamatan == filters['kecamatan'])
+                
+                # Filter by facility type
+                if 'tipe_faskes' in filters and filters['tipe_faskes']:
+                    filter_conditions.append(HealthFacilityId.tipe_faskes == filters['tipe_faskes'])
+            
+            # Apply all filter conditions
+            query = query.filter(and_(*filter_conditions))
+            
+            # 2. Apply sorting after filtering is complete
+            if hasattr(MalariaHealthFacilityMonthly, sort_by):
+                order_column = getattr(MalariaHealthFacilityMonthly, sort_by)
+            else:
+                # Default to id_mhfm if invalid sort column
+                order_column = MalariaHealthFacilityMonthly.id_mhfm
+            
+            if sort_order and sort_order.lower() == 'desc':
+                query = query.order_by(desc(order_column))
+            else:
+                query = query.order_by(asc(order_column))
+            
+            # 3. Apply pagination after filtering and sorting
+            paginated_records = query.paginate(page=page, per_page=per_page, error_out=False)
+            
+            # Prepare result
+            records = paginated_records.items
+            result = [record.to_dict() for record in records]
+            
+            # Prepare metadata
+            meta = {
+                "page": page,
+                "per_page": per_page,
+                "total_pages": paginated_records.pages,
+                "total_records": paginated_records.total,
+                "month": month,
+                "year": year,
+                "status": status,
+                "has_next": paginated_records.has_next,
+                "has_prev": paginated_records.has_prev,
+                "filters": filters or {}
+            }
+            
+            return result, meta, None
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return None, None, str(e)
     def get_by_id(self, id_field, id_value):
         """Retrieve a record by its ID."""
         try:

@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import os
 from app.models.db_models import MalariaHealthFacilityMonthly
-from app.ml.utils import train_or_load_model, get_model_data_from_db, predict_six_months_ahead, generate_prediction_plots
+from app.ml.utils import delete_predicted_data, train_or_load_model, get_model_data_from_db, predict_six_months_ahead, generate_prediction_plots
 from app import db
 from flask import current_app
 from datetime import datetime
@@ -76,7 +76,6 @@ def predict():
             
         # Get data for prediction
         df = get_model_data_from_db()
-        print(df)
         if df is None or len(df) == 0:
             return jsonify({
                 "success": False,
@@ -85,8 +84,6 @@ def predict():
             
         # Make predictions
         predictions_df, actual_facility_id = predict_six_months_ahead(model_instance, model, df, facility_id)
-        print("hfi")
-        print(actual_facility_id)
         # Generate plots
         # plot_url = generate_prediction_plots(predictions_df)
         
@@ -233,6 +230,8 @@ def predict_all_facilities():
             }), 500
             
         # Get data for prediction
+        
+        delete_predicted_data()
         df = get_model_data_from_db()
         
         if df is None or len(df) == 0:

@@ -181,7 +181,42 @@ def generate_prediction_plots(predictions):
     plt.close(fig)
     
     return plot_url
-
+def delete_predicted_data():
+    """
+    Delete all records with status='predicted' from the malaria_health_facility_monthly table
+    
+    Returns:
+        int: The number of rows deleted
+    """
+    from sqlalchemy.sql import text
+    from app import db
+    
+    try:
+        # Create SQL query to delete predicted data
+        query = text("""
+            DELETE FROM malaria_health_facility_monthly
+            WHERE status = 'predicted'
+        """)
+        
+        # Execute the query and get the number of rows deleted
+        result = db.session.execute(query)
+        deleted_count = result.rowcount
+        
+        # Commit the transaction
+        db.session.commit()
+        
+        print(f"Successfully deleted {deleted_count} predicted records")
+        return deleted_count
+        
+    except Exception as e:
+        # Rollback the transaction in case of error
+        db.session.rollback()
+        print(f"Error deleting predicted data: {e}")
+        return 0
+        
+    finally:
+        # Always close the session
+        db.session.close()
 def get_model_data_from_db():
     """Query database to get data needed for model training"""
     # Sesuaikan query agar sesuai dengan struktur data Excel terbaru
