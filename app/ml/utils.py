@@ -36,10 +36,8 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
         facility_data['month'].astype(str).str.zfill(2) + '-01'
     )
     facility_data = facility_data.sort_values('date')
-    print(facility_data)
     # Get last 6 months of data
     last_six_months = facility_data.tail(6).reset_index(drop=True)
-    print(last_six_months)
     if len(last_six_months) < 6:
         print(f"Warning: Only {len(last_six_months)} months of data available for facility {facility_id}")
         print("Padding with previous months' data if available")
@@ -68,15 +66,11 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
 
     # Use historical window for first prediction
     current_window = last_six_months.copy()
-    print(prediction_dates)
     for i, pred_date in enumerate(prediction_dates):
         # Create prediction data for current month
         pred_data = current_window.copy()
-        print(pred_data)
         # Make prediction
-        print(trained_model.summary())
         predictions = model_instance.make_predictions(trained_model, pred_data)
-        print(predictions)
         # Create prediction result
         pred_result = {
             'date': pred_date,
@@ -314,7 +308,6 @@ def train_or_load_model():
     else:
         # Get data for model training
         df = get_model_data_from_db()
-        print(df)
 
         if df is None or len(df) == 0:
             print("No data available for model training")
@@ -328,10 +321,7 @@ def train_or_load_model():
             window_len=current_app.config['ML_WINDOW_LENGTH'],
             batch_size=current_app.config['ML_BATCH_SIZE']
         )
-        print(model_instance)
-        print(df.columns)
         model, _, n_features, n_targets = model_instance.train_model(df, epochs=current_app.config['ML_EPOCHS'])  
-        print(n_features)
         # Save model and scalers
         model.save(model_path)
         scalers = {

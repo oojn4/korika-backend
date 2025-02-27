@@ -35,7 +35,6 @@ def upload_malaria_data():
         return jsonify({'error': 'Data tidak ditemukan atau format tidak valid'}), 400
     
     excel_data = request_data['data']
-    print(excel_data)
     try:
         # Hasil proses
         result = {
@@ -142,7 +141,7 @@ def upload_malaria_data():
                     new_malaria_data = MalariaHealthFacilityMonthly(**malaria_data)
                     db.session.add(new_malaria_data)
                     result['malaria_data_added'] += 1
-                print(result)
+                
             except Exception as e:
                 error_msg = f"Error pada baris ke-{index+1}: {str(e)}"
                 result['errors'].append(error_msg)
@@ -158,7 +157,6 @@ def upload_malaria_data():
     except Exception as e:
         # Rollback jika terjadi error
         db.session.rollback()
-        print(str(e))
         return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
     finally:
         db.session.close()
@@ -283,13 +281,11 @@ def get_raw_data():
         if province:
             current_query = text(str(current_query) + " AND hfi.provinsi = :province")
             params['province'] = province
-        print(current_query)
         # Eksekusi query
         current_data = db.session.execute(current_query, params).fetchall()
         
         # Konversi ke dictionary untuk kemudahan manipulasi
         current_data = [row._asdict() for row in current_data]
-        # print(current_data)
         previous_data_index = {
             (row['id_faskes'], row['year'], row['month']): row
             for row in [row for row in current_data]
@@ -313,7 +309,6 @@ def get_raw_data():
 
             # Tambahkan hasil yang telah dihitung ke dalam final_data
             final_data.append(row)
-        # print(final_data)
         # Langkah 1: Cari tahun dan bulan terakhir
         max_year_actual = max(row['year'] for row in final_data if row['status'] == 'actual')
         max_month_actual = max(row['month'] for row in final_data if (row['status'] == 'actual')&(row['year'] == max_year_actual))

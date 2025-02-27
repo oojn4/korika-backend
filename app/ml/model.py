@@ -135,8 +135,6 @@ class MultivariateTimeSeriesLSTM:
         y_train = y[train_mask]
         X_val = X[val_mask]
         y_val = y[val_mask]
-        # print(X_train)
-        print(X_val)
         # Create generators
         train_gen = TimeseriesGenerator(
             data=X_train,
@@ -159,8 +157,6 @@ class MultivariateTimeSeriesLSTM:
         # Get dimensions
         n_features = X_train.shape[1]
         n_targets = y_train.shape[1]
-        print(n_features)
-        print(n_targets)
         # Build model
         model = self.build_model(n_features, n_targets)
 
@@ -224,7 +220,6 @@ class MultivariateTimeSeriesLSTM:
         
         # Create sequences with padded data if necessary
         X_seq = np.array([X_features_padded[-self.window_len:]])
-        print(f"X_seq shape: {X_seq.shape}")  # Should be (1, 6, 11)
         
         # Make prediction
         scaled_pred = model.predict(X_seq)

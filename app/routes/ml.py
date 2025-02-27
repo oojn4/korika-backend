@@ -128,7 +128,6 @@ def download_prediction(filename):
 def insert_predictions_to_db(predictions_df):
     """Insert prediction results into database"""
     try:
-        print(predictions_df)
         for _, row in predictions_df.iterrows():
             # Convert prediction values to database format
 
