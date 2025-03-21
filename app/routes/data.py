@@ -294,7 +294,14 @@ def get_raw_data():
         # Hitung perubahan M-to-M dan Y-on-Y
         final_data = []
         for row in current_data:
-            prev_row = previous_data_index.get((row['id_faskes'], row['year'], row['month'] - 1))
+            # Check if current month is January to properly handle month-to-month change
+            if row['month'] == 1:
+                # For January, look at December of previous year
+                prev_row = previous_data_index.get((row['id_faskes'], row['year'] - 1, 12))
+            else:
+                # For all other months, look at previous month in same year
+                prev_row = previous_data_index.get((row['id_faskes'], row['year'], row['month'] - 1))
+            
             for key in ['tot_pos', 'konfirmasi_lab_mikroskop', 'konfirmasi_lab_rdt', 'konfirmasi_lab_pcr']:
                 if prev_row and row[key] and prev_row[key]:
                     row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
@@ -467,8 +474,13 @@ def get_aggregate_data():
         final_data = []
         for row in current_data:
             # Ambil data bulan sebelumnya
-            prev_actual = previous_data_index.get((row['province'], row['year'], row['month'] - 1, 'actual'))
-            prev_predicted = previous_data_index.get((row['province'], row['year'], row['month'] - 1, 'predicted'))
+            if row['month'] == 1:  # January - look at previous year's December
+                prev_actual = previous_data_index.get((row['province'], row['year'] - 1, 12, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['year'] - 1, 12, 'predicted'))
+            else:
+                prev_actual = previous_data_index.get((row['province'], row['year'], row['month'] - 1, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['year'], row['month'] - 1, 'predicted'))
+
             prev_row = prev_actual if prev_actual else prev_predicted
 
             # Hitung perubahan M-to-M
