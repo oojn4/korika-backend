@@ -206,7 +206,6 @@ def insert_predictions_to_db(predictions_df):
         return True
     except Exception as e:
         db.session.rollback()
-        print(f"Error inserting predictions to database: {e}")
         return False
     finally:
         db.session.close()
@@ -254,7 +253,6 @@ def predict_all_facilities():
         # Make predictions for each facility
         for facility_id in unique_facility_ids:
             try:
-                print(f"Predicting for facility {facility_id}")
                 predictions_df, actual_facility_id = predict_six_months_ahead(model_instance, model, df, facility_id)
                 
                 # Save predictions to CSV
@@ -276,7 +274,6 @@ def predict_all_facilities():
                     failed_facilities.append(facility_id)
                     
             except Exception as e:
-                print(f"Error predicting for facility {facility_id}: {str(e)}")
                 failed_facilities.append(facility_id)
                 continue
         

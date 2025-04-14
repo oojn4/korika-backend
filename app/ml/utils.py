@@ -22,11 +22,9 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
     # Get historical data for the specified facility (last 6 months)
     facility_data = df[df['id_faskes'] == facility_id].copy()
     if len(facility_data) == 0:
-        print(f"No data found for facility ID {facility_id}")
         # Try to find closest facility ID
         available_ids = df['id_faskes'].unique()
         closest_id = available_ids[np.abs(available_ids - facility_id).argmin()]
-        print(f"Using closest facility ID {closest_id} instead")
         facility_id = closest_id
         facility_data = df[df['id_faskes'] == facility_id].copy()
 
@@ -39,8 +37,6 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
     # Get last 6 months of data
     last_six_months = facility_data.tail(6).reset_index(drop=True)
     if len(last_six_months) < 6:
-        print(f"Warning: Only {len(last_six_months)} months of data available for facility {facility_id}")
-        print("Padding with previous months' data if available")
         # Try to fill with previous months if available
         while len(last_six_months) < 6 and len(facility_data) > len(last_six_months):
             additional_data = facility_data.iloc[-(len(last_six_months)+1)].to_frame().T
@@ -53,7 +49,7 @@ def predict_six_months_ahead(model_instance, trained_model, df, facility_id):
         next_date = last_date + pd.DateOffset(months=i)
         prediction_dates.append(next_date)
 
-    # Feature columns
+    # Feature columns - still using the same names but they come from env data table now
     feature_columns = [
         'hujan_hujan_mean', 'hujan_hujan_max', 'hujan_hujan_min',
         'tm_tm_mean', 'tm_tm_max', 'tm_tm_min', 'ss_monthly_mean', 'rh_mean','rh_min','rh_max',   
@@ -175,6 +171,7 @@ def generate_prediction_plots(predictions):
     plt.close(fig)
     
     return plot_url
+
 def delete_predicted_data():
     """
     Delete all records with status='predicted' from the malaria_health_facility_monthly table
@@ -199,21 +196,20 @@ def delete_predicted_data():
         # Commit the transaction
         db.session.commit()
         
-        print(f"Successfully deleted {deleted_count} predicted records")
         return deleted_count
         
     except Exception as e:
         # Rollback the transaction in case of error
         db.session.rollback()
-        print(f"Error deleting predicted data: {e}")
         return 0
         
     finally:
         # Always close the session
         db.session.close()
+
 def get_model_data_from_db():
     """Query database to get data needed for model training"""
-    # Sesuaikan query agar sesuai dengan struktur data Excel terbaru
+    # Updated query to join with environmental_factors_monthly table
     query = text("""
     
             SELECT 
@@ -254,24 +250,29 @@ def get_model_data_from_db():
                 mhfm.penularan_impor,
                 mhfm.penularan_induced,
                 mhfm.relaps,
-                mhfm.hujan_hujan_mean,
-                mhfm.hujan_hujan_max,
-                mhfm.hujan_hujan_min,
-                mhfm.tm_tm_mean,
-                mhfm.tm_tm_max,
-                mhfm.tm_tm_min,
-                mhfm.ss_monthly_mean,
-                mhfm.ff_x_monthly_mean,
-                mhfm.ddd_x_monthly_mean,
-                mhfm.ff_avg_monthly_mean,
-                mhfm.rh_mean,mhfm.rh_min,mhfm.rh_max,
-                mhfm.pop_penduduk_kab
+                env.hujan_hujan_mean,
+                env.hujan_hujan_max,
+                env.hujan_hujan_min,
+                env.tm_tm_mean,
+                env.tm_tm_max,
+                env.tm_tm_min,
+                env.ss_monthly_mean,
+                env.ff_x_monthly_mean,
+                env.ddd_x_monthly_mean,
+                env.ff_avg_monthly_mean,
+                env.rh_mean,
+                env.rh_min,
+                env.rh_max,
+                env.pop_penduduk_kab
             FROM 
                 malaria_health_facility_monthly mhfm
             JOIN 
-                health_facility_id hfi
-            ON 
-                mhfm.id_faskes = hfi.id_faskes
+                health_facility_id hfi ON mhfm.id_faskes = hfi.id_faskes
+            JOIN
+                environmental_factors_monthly env 
+                ON mhfm.id_faskes = env.id_faskes 
+                AND mhfm.bulan = env.bulan 
+                AND mhfm.tahun = env.tahun
             WHERE
                 mhfm.status = 'actual'
     """)
@@ -281,7 +282,6 @@ def get_model_data_from_db():
         df = pd.DataFrame(result)
         return df
     except Exception as e:
-        print(f"Error getting data from database: {e}")
         return None
     finally:
         db.session.close()
@@ -303,18 +303,13 @@ def train_or_load_model():
         model_instance.feature_scaler = scalers['feature_scaler']
         model_instance.target_scaler = scalers['target_scaler']
         model_instance.facility_encoder = scalers['facility_encoder']
-        print("Loaded existing model and scalers")
         return model, model_instance, True
     else:
         # Get data for model training
         df = get_model_data_from_db()
 
         if df is None or len(df) == 0:
-            print("No data available for model training")
             return None, None, False
-            
-        # Train new model
-        print("Training new model...")
         
         # Train model
         model_instance = MultivariateTimeSeriesLSTM(
@@ -330,5 +325,4 @@ def train_or_load_model():
             'facility_encoder': model_instance.facility_encoder
         }
         joblib.dump(scalers, scaler_path)
-        print("Trained and saved new model and scalers")
         return model, model_instance, True
