@@ -14,152 +14,153 @@ import requests
 
 bp = Blueprint('data', __name__, url_prefix='')
 
-ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
+# ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# def allowed_file(filename):
+#     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@bp.route('/upload', methods=['POST'])
-@jwt_required()
-def upload_malaria_data():
-    # Cek user identity
-    current_user_id = get_jwt_identity()
+# @bp.route('/upload', methods=['POST'])
+# @jwt_required()
+# def upload_malaria_data():
+#     # Cek user identity
+#     current_user_id = get_jwt_identity()
     
-    # Validasi request body
-    if not request.is_json:
-        return jsonify({'error': 'Request harus berupa JSON'}), 400
+#     # Validasi request body
+#     if not request.is_json:
+#         return jsonify({'error': 'Request harus berupa JSON'}), 400
     
-    request_data = request.get_json()
+#     request_data = request.get_json()
     
-    if 'data' not in request_data or not isinstance(request_data['data'], list) or not request_data['data']:
-        return jsonify({'error': 'Data tidak ditemukan atau format tidak valid'}), 400
+#     if 'data' not in request_data or not isinstance(request_data['data'], list) or not request_data['data']:
+#         return jsonify({'error': 'Data tidak ditemukan atau format tidak valid'}), 400
     
-    excel_data = request_data['data']
-    try:
-        # Hasil proses
-        result = {
-            'health_facility_added': 0,
-            'health_facility_existed': 0,
-            'malaria_data_added': 0,
-            'malaria_data_updated': 0,
-            'errors': []
-        }
+#     excel_data = request_data['data']
+#     try:
+#         # Hasil proses
+#         result = {
+#             'health_facility_added': 0,
+#             'health_facility_existed': 0,
+#             'malaria_data_added': 0,
+#             'malaria_data_updated': 0,
+#             'errors': []
+#         }
         
-        # Proses baris per baris dari data JSON
-        for index, row in enumerate(excel_data):
-            try:
-                # Pastikan kolom yang diperlukan ada
-                required_columns = ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan']
-                missing_columns = [col for col in required_columns if col not in row]
+#         # Proses baris per baris dari data JSON
+#         for index, row in enumerate(excel_data):
+#             try:
+#                 # Pastikan kolom yang diperlukan ada
+#                 required_columns = ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan']
+#                 missing_columns = [col for col in required_columns if col not in row]
                 
-                if missing_columns:
-                    result['errors'].append(f'Baris ke-{index+1}: Kolom yang diperlukan tidak ditemukan: {missing_columns}')
-                    continue
+#                 if missing_columns:
+#                     result['errors'].append(f'Baris ke-{index+1}: Kolom yang diperlukan tidak ditemukan: {missing_columns}')
+#                     continue
                 
-                id_faskes = row['id_faskes']
-                bulan = row['bulan']
-                tahun = row['tahun']
+#                 id_faskes = row['id_faskes']
+#                 bulan = row['bulan']
+#                 tahun = row['tahun']
                 
-                # Proses HealthFacilityId (pastikan tidak duplikat)
-                existing_facility = HealthFacilityId.query.filter_by(
-                    id_faskes=id_faskes,
-                    provinsi=row['provinsi'],
-                    kabupaten=row['kabupaten'],
-                    kecamatan=row['kecamatan'],
-                    nama_faskes=row.get('nama_faskes')
-                ).first()
+#                 # Proses HealthFacilityId (pastikan tidak duplikat)
+#                 existing_facility = HealthFacilityId.query.filter_by(
+#                     id_faskes=id_faskes,
+#                     provinsi=row['provinsi'],
+#                     kabupaten=row['kabupaten'],
+#                     kecamatan=row['kecamatan'],
+#                     nama_faskes=row.get('nama_faskes')
+#                 ).first()
                 
-                if not existing_facility:
-                    # Tambahkan fasilitas kesehatan baru
-                    new_facility = HealthFacilityId(
-                        id_faskes=id_faskes,
-                        provinsi=row['provinsi'],
-                        kabupaten=row['kabupaten'],
-                        kecamatan=row['kecamatan'],
-                        owner=row.get('owner'),
-                        tipe_faskes=row.get('tipe_faskes'),
-                        nama_faskes=row.get('nama_faskes'),
-                        address=row.get('address'),
-                        url=row.get('url'),
-                        lat=row.get('lat'),
-                        lon=row.get('lon')
-                    )
+#                 if not existing_facility:
+#                     # Tambahkan fasilitas kesehatan baru
+#                     new_facility = HealthFacilityId(
+#                         id_faskes=id_faskes,
+#                         provinsi=row['provinsi'],
+#                         kabupaten=row['kabupaten'],
+#                         kecamatan=row['kecamatan'],
+#                         owner=row.get('owner'),
+#                         tipe_faskes=row.get('tipe_faskes'),
+#                         nama_faskes=row.get('nama_faskes'),
+#                         address=row.get('address'),
+#                         url=row.get('url'),
+#                         lat=row.get('lat'),
+#                         lon=row.get('lon')
+#                     )
                     
-                    db.session.add(new_facility)
-                    db.session.flush()  # Flush untuk mendapatkan ID yang baru dibuat
-                    result['health_facility_added'] += 1
-                else:
-                    result['health_facility_existed'] += 1
+#                     db.session.add(new_facility)
+#                     db.session.flush()  # Flush untuk mendapatkan ID yang baru dibuat
+#                     result['health_facility_added'] += 1
+#                 else:
+#                     result['health_facility_existed'] += 1
                 
-                # Proses MalariaHealthFacilityMonthly (update jika duplikat)
-                existing_data = MalariaHealthFacilityMonthly.query.filter_by(
-                    id_faskes=id_faskes,
-                    bulan=bulan,
-                    tahun=tahun
-                ).first()
+#                 # Proses MalariaHealthFacilityMonthly (update jika duplikat)
+#                 existing_data = MalariaHealthFacilityMonthly.query.filter_by(
+#                     id_faskes=id_faskes,
+#                     bulan=bulan,
+#                     tahun=tahun
+#                 ).first()
                 
-                # Siapkan data malaria
-                malaria_data = {
-                    'id_faskes': id_faskes,
-                    'bulan': bulan,
-                    'tahun': tahun,
-                    'status': 'actual',  # Pastikan status selalu "actual"
-                }
+#                 # Siapkan data malaria
+#                 malaria_data = {
+#                     'id_faskes': id_faskes,
+#                     'bulan': bulan,
+#                     'tahun': tahun,
+#                     'status': 'actual',  # Pastikan status selalu "actual"
+#                 }
                 
-                # Tambahkan kolom lain jika tersedia di data JSON
-                # Add validation for data types
-                for column, value in row.items():
-                    if column not in ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan',
-                                    'owner', 'tipe_faskes', 'nama_faskes', 'address', 'url', 'lat', 'lon']:
-                        # Pastikan kolom ada di model MalariaHealthFacilityMonthly
-                        if hasattr(MalariaHealthFacilityMonthly, column) and value is not None:
-                            # Add type checking here
-                            column_type = MalariaHealthFacilityMonthly.__table__.columns[column].type.python_type
-                            try:
-                                # Cast value to appropriate type
-                                if column_type == float:
-                                    malaria_data[column] = float(value)
-                                elif column_type == int:
-                                    malaria_data[column] = int(value)
-                                elif column_type == str:
-                                    malaria_data[column] = str(value)
-                                else:
-                                    malaria_data[column] = value
-                            except (ValueError, TypeError):
-                                # Handle type conversion errors
-                                error_msg = f"Error konversi tipe data untuk kolom {column}: nilai '{value}' tidak valid untuk tipe {column_type.__name__}"
-                                result['errors'].append(error_msg)
-                                continue
+#                 # Tambahkan kolom lain jika tersedia di data JSON
+#                 # Add validation for data types
+#                 for column, value in row.items():
+#                     if column not in ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan',
+#                                     'owner', 'tipe_faskes', 'nama_faskes', 'address', 'url', 'lat', 'lon']:
+#                         # Pastikan kolom ada di model MalariaHealthFacilityMonthly
+#                         if hasattr(MalariaHealthFacilityMonthly, column) and value is not None:
+#                             # Add type checking here
+#                             column_type = MalariaHealthFacilityMonthly.__table__.columns[column].type.python_type
+#                             try:
+#                                 # Cast value to appropriate type
+#                                 if column_type == float:
+#                                     malaria_data[column] = float(value)
+#                                 elif column_type == int:
+#                                     malaria_data[column] = int(value)
+#                                 elif column_type == str:
+#                                     malaria_data[column] = str(value)
+#                                 else:
+#                                     malaria_data[column] = value
+#                             except (ValueError, TypeError):
+#                                 # Handle type conversion errors
+#                                 error_msg = f"Error konversi tipe data untuk kolom {column}: nilai '{value}' tidak valid untuk tipe {column_type.__name__}"
+#                                 result['errors'].append(error_msg)
+#                                 continue
                 
-                if existing_data:
-                    # Update data yang sudah ada
-                    for key, value in malaria_data.items():
-                        setattr(existing_data, key, value)
-                    result['malaria_data_updated'] += 1
-                else:
-                    # Tambahkan data baru
-                    new_malaria_data = MalariaHealthFacilityMonthly(**malaria_data)
-                    db.session.add(new_malaria_data)
-                    result['malaria_data_added'] += 1
+#                 if existing_data:
+#                     # Update data yang sudah ada
+#                     for key, value in malaria_data.items():
+#                         setattr(existing_data, key, value)
+#                     result['malaria_data_updated'] += 1
+#                 else:
+#                     # Tambahkan data baru
+#                     new_malaria_data = MalariaHealthFacilityMonthly(**malaria_data)
+#                     db.session.add(new_malaria_data)
+#                     result['malaria_data_added'] += 1
                 
-            except Exception as e:
-                error_msg = f"Error pada baris ke-{index+1}: {str(e)}"
-                result['errors'].append(error_msg)
+#             except Exception as e:
+#                 error_msg = f"Error pada baris ke-{index+1}: {str(e)}"
+#                 result['errors'].append(error_msg)
         
-        # Commit semua perubahan ke database
-        db.session.commit()
+#         # Commit semua perubahan ke database
+#         db.session.commit()
         
-        return jsonify({
-            'message': 'Data berhasil diproses',
-            'result': result
-        }), 200
+#         return jsonify({
+#             'message': 'Data berhasil diproses',
+#             'result': result
+#         }), 200
         
-    except Exception as e:
-        # Rollback jika terjadi error
-        db.session.rollback()
-        return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
-    finally:
-        db.session.close()
+#     except Exception as e:
+#         # Rollback jika terjadi error
+#         db.session.rollback()
+#         return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
+#     finally:
+#         db.session.close()
+
 @bp.route('/get-weather', methods=['GET'])
 def get_weather():
     try:
@@ -192,6 +193,7 @@ def get_weather():
             'success': False,
             'error': str(e)
         }), 500
+
 @bp.route('/get-provinces', methods=['GET'])
 @jwt_required()
 def get_provinces():
@@ -216,6 +218,7 @@ def get_provinces():
         return jsonify({"error": str(e)}), 500
     finally:
         db.session.close()
+
 @bp.route('/get-cities', methods=['GET'])
 @jwt_required()
 def get_cities():
@@ -273,42 +276,42 @@ def get_districts():
     finally:
         db.session.close()
 
-@bp.route('/get-facilities', methods=['GET'])
-@jwt_required()
-def get_facilities():
-    """Get list of facilities for prediction"""
-    try:
-        province = request.args.get('province', default=None, type=str)
-        kabupaten = request.args.get('kabupaten', default=None, type=str)
+# @bp.route('/get-facilities', methods=['GET'])
+# @jwt_required()
+# def get_facilities():
+#     """Get list of facilities for prediction"""
+#     try:
+#         province = request.args.get('province', default=None, type=str)
+#         kabupaten = request.args.get('kabupaten', default=None, type=str)
         
-        query = HealthFacility.query
+#         query = HealthFacility.query
         
-        if province and province != 'TOTAL':
-            query = query.filter_by(provinsi=province)
-        if kabupaten:
-            query = query.filter_by(kabupaten=kabupaten)
+#         if province and province != 'TOTAL':
+#             query = query.filter_by(provinsi=province)
+#         if kabupaten:
+#             query = query.filter_by(kabupaten=kabupaten)
             
-        facilities = query.all()
+#         facilities = query.all()
         
-        return jsonify({
-            "success": True,
-            "facilities": [{
-                "id_faskes": f.id_faskes,
-                "nama_faskes": f.nama_faskes,
-                "tipe_faskes": f.tipe_faskes,
-                "provinsi": f.provinsi,
-                "kabupaten": f.kabupaten,
-                "kecamatan": f.kecamatan
-            } for f in facilities]
-        }), 200
+#         return jsonify({
+#             "success": True,
+#             "facilities": [{
+#                 "id_faskes": f.id_faskes,
+#                 "nama_faskes": f.nama_faskes,
+#                 "tipe_faskes": f.tipe_faskes,
+#                 "provinsi": f.provinsi,
+#                 "kabupaten": f.kabupaten,
+#                 "kecamatan": f.kecamatan
+#             } for f in facilities]
+#         }), 200
         
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-    finally:
-        db.session.close()
+#     except Exception as e:
+#         return jsonify({
+#             "success": False,
+#             "error": str(e)
+#         }), 500
+#     finally:
+#         db.session.close()
 
 @bp.route('/get-raw-data-malaria', methods=['GET'])
 @jwt_required()
@@ -1736,127 +1739,6 @@ def get_aggregate_data_lepto():
                 final_data.append(row)
 
             return jsonify({"data": final_data, "success": True}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        db.session.close()
-    try:
-        # Ambil parameter dari request
-        province = request.args.get('province', default=None, type=str)
-        year = request.args.get('year', default=None, type=int)
-        month = request.args.get('month', default=None, type=int)
-
-        if not province:
-            return jsonify({"error": "Parameter 'province' is required"}), 400
-
-        # SQL query untuk mengambil data agregat Lepto
-        query = text("""
-        WITH combined_data AS (
-            (
-                SELECT 
-                    'TOTAL' AS province,
-                    lk.tahun AS year,
-                    lk.bulan AS month,
-                    lk.status,
-                    SUM(lk.lep_k) AS lep_k,
-                    SUM(lk.lep_m) AS lep_m
-                    -- SUM(p.jumlah_penduduk) AS jumlah_penduduk -- Dikomentari dulu
-                FROM 
-                    lepto_kasus lk
-                -- LEFT JOIN 
-                --    penduduk p ON lk.kd_kabkot = p.kd_kabkot AND lk.tahun = p.tahun AND lk.bulan = p.bulan
-                GROUP BY 
-                    lk.tahun, lk.bulan, lk.status
-            )
-            UNION ALL
-            (
-                SELECT 
-                    mwk.provinsi AS province,
-                    lk.tahun AS year,
-                    lk.bulan AS month,
-                    lk.status,
-                    SUM(lk.lep_k) AS lep_k,
-                    SUM(lk.lep_m) AS lep_m
-                    -- SUM(p.jumlah_penduduk) AS jumlah_penduduk -- Dikomentari dulu
-                FROM 
-                    lepto_kasus lk
-                JOIN 
-                    master_wilayah_kabupaten mwk ON lk.kd_kabkot = mwk.kd_kabkot
-                -- LEFT JOIN 
-                --    penduduk p ON lk.kd_kabkot = p.kd_kabkot AND lk.tahun = p.tahun AND lk.bulan = p.bulan
-                GROUP BY 
-                    mwk.provinsi, lk.tahun, lk.bulan, lk.status
-            )
-        )
-        SELECT 
-            *
-        FROM 
-            combined_data
-        WHERE 
-            province = :province
-        """)
-
-        # Tambahkan kondisi tambahan jika year atau month ada
-        if year:
-            query = text(str(query) + " AND year = :year")
-        if month:
-            query = text(str(query) + " AND month = :month")
-
-        query = text(str(query) + " ORDER BY province, year, month;")
-
-        # Eksekusi query menggunakan SQLAlchemy
-        params = {'province': province}
-        if year:
-            params['year'] = year
-        if month:
-            params['month'] = month
-
-        current_data = db.session.execute(query, params).fetchall()
-
-        # Konversi ke dictionary untuk kemudahan manipulasi
-        current_data = [row._asdict() for row in current_data]
-        previous_data_index = {
-            (row['province'], row['year'], row['month'], row['status']): row
-            for row in current_data
-        }
-
-        # Hitung perubahan M-to-M dan Y-on-Y
-        final_data = []
-        for row in current_data:
-            # Ambil data bulan sebelumnya
-            if row['month'] == 1:  # January - look at previous year's December
-                prev_actual = previous_data_index.get((row['province'], row['year'] - 1, 12, 'actual'))
-                prev_predicted = previous_data_index.get((row['province'], row['year'] - 1, 12, 'predicted'))
-            else:
-                prev_actual = previous_data_index.get((row['province'], row['year'], row['month'] - 1, 'actual'))
-                prev_predicted = previous_data_index.get((row['province'], row['year'], row['month'] - 1, 'predicted'))
-
-            prev_row = prev_actual if prev_actual else prev_predicted
-
-            # Hitung perubahan M-to-M
-            for key in ['lep_k', 'lep_m']:
-                if prev_row and row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
-                    row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
-                else:
-                    row[f'{key}_m_to_m_change'] = None
-
-            # Ambil data tahun sebelumnya di bulan yang sama
-            yoy_actual = previous_data_index.get((row['province'], row['year'] - 1, row['month'], 'actual'))
-            yoy_predicted = previous_data_index.get((row['province'], row['year'] - 1, row['month'], 'predicted'))
-            yoy_row = yoy_actual if yoy_actual else yoy_predicted
-
-            # Hitung perubahan Y-on-Y
-            for key in ['lep_k', 'lep_m']:
-                if yoy_row and row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
-                    row[f'{key}_y_on_y_change'] = ((row[key] - yoy_row[key]) / yoy_row[key]) * 100
-                else:
-                    row[f'{key}_y_on_y_change'] = None
-
-            # Tambahkan hasil yang telah dihitung ke dalam final_data
-            final_data.append(row)
-
-        return jsonify({"data": final_data, "success": True}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

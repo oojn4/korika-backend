@@ -1,0 +1,579 @@
+openapi: 3.0.1
+info:
+  title: CSI Korika API
+  description: API untuk aplikasi Climate Smart Indonesia (CSI) Korika
+  version: 1.0.0
+servers:
+  - url: http://202.43.168.207:5000
+    description: Production Server
+  - url: http://localhost:5000
+    description: Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        email:
+          type: string
+        full_name:
+          type: string
+        phone_number:
+          type: string
+        address_1:
+          type: string
+        address_2:
+          type: string
+        access_level:
+          type: string
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        full_name:
+          type: string
+        phone_number:
+          type: string
+        address_1:
+          type: string
+        address_2:
+          type: string
+        access_level:
+          type: string
+    WeatherParams:
+      type: object
+      properties:
+        params:
+          type: string
+          description: Parameter untuk API cuaca BMKG
+    MalariaCriteria:
+      type: object
+      properties:
+        province:
+          type: string
+          description: Kode provinsi
+        city:
+          type: string
+          description: Kode kabupaten/kota
+        district:
+          type: string
+          description: Kode kecamatan
+        month_year:
+          type: string
+          description: Format YYYY-MM untuk filter berdasarkan bulan dan tahun
+    AggregateCriteria:
+      type: object
+      properties:
+        province:
+          type: string
+          description: Kode provinsi
+        city:
+          type: string
+          description: Kode kabupaten/kota
+        start:
+          type: string
+          description: Format YYYY-MM untuk awal rentang waktu
+        end:
+          type: string
+          description: Format YYYY-MM untuk akhir rentang waktu
+    LocationCriteria:
+      type: object
+      properties:
+        province:
+          type: string
+          description: Kode provinsi
+
+paths:
+  /signup:
+    post:
+      summary: Pendaftaran user baru
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Pendaftaran berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  access_token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+                  success:
+                    type: boolean
+        '400':
+          description: Email dan password diperlukan atau user sudah ada
+        '500':
+          description: Server error
+
+  /signin:
+    post:
+      summary: Login user
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  access_token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+                  success:
+                    type: boolean
+        '401':
+          description: Kredensial tidak valid
+        '500':
+          description: Server error
+
+  /get-weather:
+    get:
+      summary: Mendapatkan data cuaca
+      tags:
+        - Data
+      parameters:
+        - in: query
+          name: params
+          schema:
+            type: string
+          description: Parameter untuk API cuaca
+      responses:
+        '200':
+          description: Data cuaca berhasil diambil
+        '500':
+          description: Server error
+
+  /get-provinces:
+    get:
+      summary: Mendapatkan daftar provinsi
+      tags:
+        - Location
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Daftar provinsi berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                        name:
+                          type: string
+                        bmkg:
+                          type: string
+                  success:
+                    type: boolean
+        '500':
+          description: Server error
+
+  /get-cities:
+    get:
+      summary: Mendapatkan daftar kabupaten/kota
+      tags:
+        - Location
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          description: Kode provinsi
+      responses:
+        '200':
+          description: Daftar kabupaten/kota berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                        name:
+                          type: string
+                        bmkg:
+                          type: string
+                  success:
+                    type: boolean
+        '500':
+          description: Server error
+
+  /get-districts:
+    get:
+      summary: Mendapatkan daftar kecamatan
+      tags:
+        - Location
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+      responses:
+        '200':
+          description: Daftar kecamatan berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code:
+                          type: string
+                        name:
+                          type: string
+                        bmkg:
+                          type: string
+                  success:
+                    type: boolean
+        '500':
+          description: Server error
+
+  /get-raw-data-malaria:
+    get:
+      summary: Mendapatkan data malaria mentah
+      tags:
+        - Malaria
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          description: Kode provinsi
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+        - in: query
+          name: district
+          schema:
+            type: string
+          description: Kode kecamatan
+        - in: query
+          name: month_year
+          schema:
+            type: string
+          description: Format YYYY-MM
+      responses:
+        '200':
+          description: Data malaria berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  metadata:
+                    type: object
+                  success:
+                    type: boolean
+        '400':
+          description: Format tanggal tidak valid
+        '404':
+          description: Data tidak ditemukan
+        '500':
+          description: Server error
+
+  /get-aggregate-data-malaria:
+    get:
+      summary: Mendapatkan data malaria agregat
+      tags:
+        - Malaria
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          required: true
+          description: Kode provinsi
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+        - in: query
+          name: start
+          schema:
+            type: string
+          description: Format YYYY-MM awal
+        - in: query
+          name: end
+          schema:
+            type: string
+          description: Format YYYY-MM akhir
+      responses:
+        '200':
+          description: Data agregat malaria berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  success:
+                    type: boolean
+        '400':
+          description: Parameter provinsi diperlukan
+        '500':
+          description: Server error
+
+  /get-raw-data-dbd:
+    get:
+      summary: Mendapatkan data DBD mentah
+      tags:
+        - DBD
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          description: Kode provinsi
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+        - in: query
+          name: month_year
+          schema:
+            type: string
+          description: Format YYYY-MM
+      responses:
+        '200':
+          description: Data DBD berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  metadata:
+                    type: object
+                  success:
+                    type: boolean
+        '400':
+          description: Format tanggal tidak valid
+        '404':
+          description: Data tidak ditemukan
+        '500':
+          description: Server error
+
+  /get-aggregate-data-dbd:
+    get:
+      summary: Mendapatkan data DBD agregat
+      tags:
+        - DBD
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          required: true
+          description: Kode provinsi
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+        - in: query
+          name: start
+          schema:
+            type: string
+          description: Format YYYY-MM awal
+        - in: query
+          name: end
+          schema:
+            type: string
+          description: Format YYYY-MM akhir
+      responses:
+        '200':
+          description: Data agregat DBD berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  success:
+                    type: boolean
+        '400':
+          description: Parameter provinsi diperlukan
+        '500':
+          description: Server error
+
+  /get-raw-data-lepto:
+    get:
+      summary: Mendapatkan data Leptospirosis mentah
+      tags:
+        - Leptospirosis
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          description: Kode provinsi
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+        - in: query
+          name: month_year
+          schema:
+            type: string
+          description: Format YYYY-MM
+      responses:
+        '200':
+          description: Data Leptospirosis berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  metadata:
+                    type: object
+                  success:
+                    type: boolean
+        '400':
+          description: Format tanggal tidak valid
+        '404':
+          description: Data tidak ditemukan
+        '500':
+          description: Server error
+
+  /get-aggregate-data-lepto:
+    get:
+      summary: Mendapatkan data Leptospirosis agregat
+      tags:
+        - Leptospirosis
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: province
+          schema:
+            type: string
+          required: true
+          description: Kode provinsi
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Kode kabupaten/kota
+        - in: query
+          name: start
+          schema:
+            type: string
+          description: Format YYYY-MM awal
+        - in: query
+          name: end
+          schema:
+            type: string
+          description: Format YYYY-MM akhir
+      responses:
+        '200':
+          description: Data agregat Leptospirosis berhasil diambil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  success:
+                    type: boolean
+        '400':
+          description: Parameter provinsi diperlukan
+        '500':
+          description: Server error
