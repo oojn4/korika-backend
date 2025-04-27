@@ -35,7 +35,7 @@ def create_app():
     # Register routes
     with app.app_context():
         # Import routes
-        from app.routes import auth,data
+        from app.routes import auth,data,admin
         
         # Register blueprints
         app.register_blueprint(auth.bp)
@@ -43,7 +43,7 @@ def create_app():
         # app.register_blueprint(ml.bp)
         # app.register_blueprint(admin.malaria_bp)
         # app.register_blueprint(admin.facility_bp)
-        # app.register_blueprint(admin.user_bp)
+        app.register_blueprint(admin.user_bp)
         # app.register_blueprint(admin.env_bp)
         
         # You can use db.create_all() again if you're not using migrations
