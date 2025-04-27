@@ -1,7 +1,7 @@
 openapi: 3.0.1
 info:
   title: CSI Korika API
-  description: API untuk aplikasi Climate Smart Indonesia (CSI) Korika
+  description: API untuk aplikasi ClimateSmart Indonesia (CSI) Korika
   version: 1.0.0
 servers:
   - url: http://202.43.168.207:5000

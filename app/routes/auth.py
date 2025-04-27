@@ -24,7 +24,7 @@ def signup():
         if not email or not password:
             return jsonify({
                 "status": 400,
-                "message": "Email and password are required",
+                "message": "Email dan password dibutuhkan",
                 "success": False
             }), 400
         
@@ -33,7 +33,7 @@ def signup():
         if existing_user:
             return jsonify({
                 "status": 400,
-                "message": "User already exists",
+                "message": "User dengan email tersebut sudah terdaftar",
                 "success": False
             }), 400
         
@@ -62,7 +62,7 @@ def signup():
         )
         
         return jsonify({
-            "message": "Signup successful",
+            "message": "Pendaftaran berhasil",
             "access_token": access_token,
             "user": new_user.to_dict(),
             "success": True
@@ -72,7 +72,7 @@ def signup():
         db.session.rollback()
         return jsonify({
             "status": 500,
-            "message": str(e),
+            "message": "Terjadi kesalahan, silahkan coba lagi",
             "success": False
         }), 500
         
@@ -90,7 +90,7 @@ def signin():
         if not user or not check_password_hash(user.password, password):
             return jsonify({
                 "status": 401,
-                "message": "Invalid credentials",
+                "message": "Email atau Password salah",
                 "success": False
             }), 401
         
@@ -101,7 +101,7 @@ def signin():
         )
         
         return jsonify({
-            "message": "Login successful",
+            "message": "Login berhasil",
             "access_token": access_token,
             "user": user.to_dict(),
             "success": True
@@ -110,7 +110,7 @@ def signin():
     except Exception as e:
         return jsonify({
             "status": 500,
-            "message": str(e),
+            "message": "Terjadi kesalahan, silahkan coba lagi",
             "success": False
         }), 500
 

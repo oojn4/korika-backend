@@ -27,6 +27,7 @@ class MasterProv(BaseModel):
     
     kd_prov = db.Column(db.String(10), primary_key=True)
     provinsi = db.Column(db.String(100), nullable=False)
+    kd_bmkg = db.Column(db.String(10), nullable=False)
     
     # Relationships
     kabupaten = db.relationship('MasterKab', backref='province', lazy=True)
@@ -39,6 +40,7 @@ class MasterProv(BaseModel):
     def to_dict(self):
         return {
             'kd_prov': self.kd_prov,
+            'kd_bmkg': self.kd_bmkg,
             'provinsi': self.provinsi,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
@@ -56,6 +58,8 @@ class MasterKab(BaseModel):
     kd_kab = db.Column(db.String(10), primary_key=True)
     kd_prov = db.Column(db.String(10), db.ForeignKey('masterprov.kd_prov'), nullable=False)
     kabkot = db.Column(db.String(100), nullable=False)
+    kd_bmkg = db.Column(db.String(10), nullable=False)
+    status_endemis = db.Column(db.String(100), nullable=False)
     
     # Relationships
     kecamatan = db.relationship('MasterKec', backref='district', lazy=True)
@@ -68,7 +72,9 @@ class MasterKab(BaseModel):
         return {
             'kd_kab': self.kd_kab,
             'kd_prov': self.kd_prov,
+            'kd_bmkg': self.kd_bmkg,
             'kabkot': self.kabkot,
+            'status_endemis': self.status_endemis,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'created_by': self.created_by,
@@ -86,6 +92,8 @@ class MasterKec(BaseModel):
     kd_kab = db.Column(db.String(10), db.ForeignKey('masterkab.kd_kab'), nullable=False)
     kd_prov = db.Column(db.String(10), db.ForeignKey('masterprov.kd_prov'), nullable=False)
     kecamatan = db.Column(db.String(100), nullable=False)
+    kd_bmkg = db.Column(db.String(10), nullable=False)
+    
     
     # Relationships
     health_facilities = db.relationship('HealthFacility', backref='subdistrict_rel', lazy=True)
@@ -96,6 +104,7 @@ class MasterKec(BaseModel):
             'kd_kec': self.kd_kec,
             'kd_kab': self.kd_kab,
             'kd_prov': self.kd_prov,
+            'kd_bmkg': self.kd_bmkg,
             'kecamatan': self.kecamatan,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
@@ -174,6 +183,7 @@ class MalariaMonthly(BaseModel):
     p_pk = db.Column(db.Integer)
     p_mix = db.Column(db.Integer)
     p_suspek_pk = db.Column(db.Integer)
+    p_others = db.Column(db.Integer)
     kasus_pe = db.Column(db.Integer)
     obat_standar = db.Column(db.Integer)
     obat_nonprogram = db.Column(db.Integer)
@@ -215,6 +225,7 @@ class MalariaMonthly(BaseModel):
             'p_pk': self.p_pk,
             'p_mix': self.p_mix,
             'p_suspek_pk': self.p_suspek_pk,
+            'p_others': self.p_others,
             'kasus_pe': self.kasus_pe,
             'obat_standar': self.obat_standar,
             'obat_nonprogram': self.obat_nonprogram,
@@ -428,3 +439,194 @@ class Lepto(BaseModel):
     
     def __repr__(self):
         return f'<Lepto {self.kd_kab} {self.bulan}/{self.tahun}>'
+class ClimateMonthly(BaseModel):
+    __tablename__ = 'climatemonthly'
+    
+    id_climate = db.Column(db.Integer, primary_key=True)
+    kd_prov = db.Column(db.String(10), db.ForeignKey('masterprov.kd_prov'), nullable=False)
+    kd_kab = db.Column(db.String(10), db.ForeignKey('masterkab.kd_kab'), nullable=False)
+    kd_kec = db.Column(db.String(10), db.ForeignKey('masterkec.kd_kec'), nullable=False)
+    tahun = db.Column(db.Integer, nullable=False)
+    bulan = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(50))  # Added this based on the unique constraint
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    
+    # Hujan and temperature columns
+    hujan_hujan_mean = db.Column(db.Float)
+    hujan_hujan_max = db.Column(db.Float)
+    hujan_hujan_min = db.Column(db.Float)
+    rh_rh_mean = db.Column(db.Float)
+    rh_rh_max = db.Column(db.Float)
+    rh_rh_min = db.Column(db.Float)
+    tm_tm_mean = db.Column(db.Float)
+    tm_tm_max = db.Column(db.Float)
+    tm_tm_min = db.Column(db.Float)
+    
+    # Max value columns
+    max_value_10u = db.Column(db.Float)
+    max_value_10v = db.Column(db.Float)
+    max_value_2d = db.Column(db.Float)
+    max_value_2t = db.Column(db.Float)
+    max_value_cp = db.Column(db.Float)
+    max_value_crr = db.Column(db.Float)
+    max_value_cvh = db.Column(db.Float)
+    max_value_cvl = db.Column(db.Float)
+    max_value_e = db.Column(db.Float)
+    max_value_lmlt = db.Column(db.Float)
+    max_value_msl = db.Column(db.Float)
+    max_value_ro = db.Column(db.Float)
+    max_value_skt = db.Column(db.Float)
+    max_value_sp = db.Column(db.Float)
+    max_value_sro = db.Column(db.Float)
+    max_value_swvl1 = db.Column(db.Float)
+    max_value_tcc = db.Column(db.Float)
+    max_value_tcrw = db.Column(db.Float)
+    max_value_tcwv = db.Column(db.Float)
+    max_value_tp = db.Column(db.Float)
+    
+    # Mean value columns
+    mean_value_10u = db.Column(db.Float)
+    mean_value_10v = db.Column(db.Float)
+    mean_value_2d = db.Column(db.Float)
+    mean_value_2t = db.Column(db.Float)
+    mean_value_cp = db.Column(db.Float)
+    mean_value_crr = db.Column(db.Float)
+    mean_value_cvh = db.Column(db.Float)
+    mean_value_cvl = db.Column(db.Float)
+    mean_value_e = db.Column(db.Float)
+    mean_value_lmlt = db.Column(db.Float)
+    mean_value_msl = db.Column(db.Float)
+    mean_value_ro = db.Column(db.Float)
+    mean_value_skt = db.Column(db.Float)
+    mean_value_sp = db.Column(db.Float)
+    mean_value_sro = db.Column(db.Float)
+    mean_value_swvl1 = db.Column(db.Float)
+    mean_value_tcc = db.Column(db.Float)
+    mean_value_tcrw = db.Column(db.Float)
+    mean_value_tcwv = db.Column(db.Float)
+    mean_value_tp = db.Column(db.Float)
+    
+    # Min value columns
+    min_value_10u = db.Column(db.Float)
+    min_value_10v = db.Column(db.Float)
+    min_value_2d = db.Column(db.Float)
+    min_value_2t = db.Column(db.Float)
+    min_value_cp = db.Column(db.Float)
+    min_value_crr = db.Column(db.Float)
+    min_value_cvh = db.Column(db.Float)
+    min_value_cvl = db.Column(db.Float)
+    min_value_e = db.Column(db.Float)
+    min_value_lmlt = db.Column(db.Float)
+    min_value_msl = db.Column(db.Float)
+    min_value_ro = db.Column(db.Float)
+    min_value_skt = db.Column(db.Float)
+    min_value_sp = db.Column(db.Float)
+    min_value_sro = db.Column(db.Float)
+    min_value_swvl1 = db.Column(db.Float)
+    min_value_tcc = db.Column(db.Float)
+    min_value_tcrw = db.Column(db.Float)
+    min_value_tcwv = db.Column(db.Float)
+    min_value_tp = db.Column(db.Float)
+    
+    # Additional columns
+    buffer_used = db.Column(db.Integer)
+    source_year = db.Column(db.Integer)
+    
+    # Relationships
+    masterprov = db.relationship('MasterProv', foreign_keys=[kd_prov])
+    masterkab = db.relationship('MasterKab', foreign_keys=[kd_kab])
+    creator = db.relationship('User', foreign_keys=[created_by])
+    updater = db.relationship('User', foreign_keys=[updated_by])
+    
+    # Unique constraint - updated to match the SQL provided
+    __table_args__ = (
+        db.UniqueConstraint('id_climate', 'bulan', 'tahun', 'status', name='uk_climatemonthly'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id_climate': self.id_climate,
+            'kd_prov': self.kd_prov,
+            'kd_kab': self.kd_kab,
+            'kd_kec': self.kd_kec,
+            'tahun': self.tahun,
+            'bulan': self.bulan,
+            'status': self.status,
+            'hujan_hujan_mean': self.hujan_hujan_mean,
+            'hujan_hujan_max': self.hujan_hujan_max,
+            'hujan_hujan_min': self.hujan_hujan_min,
+            'rh_rh_mean': self.rh_rh_mean,
+            'rh_rh_max': self.rh_rh_max,
+            'rh_rh_min': self.rh_rh_min,
+            'tm_tm_mean': self.tm_tm_mean,
+            'tm_tm_max': self.tm_tm_max,
+            'tm_tm_min': self.tm_tm_min,
+            'max_value_10u': self.max_value_10u,
+            'max_value_10v': self.max_value_10v,
+            'max_value_2d': self.max_value_2d,
+            'max_value_2t': self.max_value_2t,
+            'max_value_cp': self.max_value_cp,
+            'max_value_crr': self.max_value_crr,
+            'max_value_cvh': self.max_value_cvh,
+            'max_value_cvl': self.max_value_cvl,
+            'max_value_e': self.max_value_e,
+            'max_value_lmlt': self.max_value_lmlt,
+            'max_value_msl': self.max_value_msl,
+            'max_value_ro': self.max_value_ro,
+            'max_value_skt': self.max_value_skt,
+            'max_value_sp': self.max_value_sp,
+            'max_value_sro': self.max_value_sro,
+            'max_value_swvl1': self.max_value_swvl1,
+            'max_value_tcc': self.max_value_tcc,
+            'max_value_tcrw': self.max_value_tcrw,
+            'max_value_tcwv': self.max_value_tcwv,
+            'max_value_tp': self.max_value_tp,
+            'mean_value_10u': self.mean_value_10u,
+            'mean_value_10v': self.mean_value_10v,
+            'mean_value_2d': self.mean_value_2d,
+            'mean_value_2t': self.mean_value_2t,
+            'mean_value_cp': self.mean_value_cp,
+            'mean_value_crr': self.mean_value_crr,
+            'mean_value_cvh': self.mean_value_cvh,
+            'mean_value_cvl': self.mean_value_cvl,
+            'mean_value_e': self.mean_value_e,
+            'mean_value_lmlt': self.mean_value_lmlt,
+            'mean_value_msl': self.mean_value_msl,
+            'mean_value_ro': self.mean_value_ro,
+            'mean_value_skt': self.mean_value_skt,
+            'mean_value_sp': self.mean_value_sp,
+            'mean_value_sro': self.mean_value_sro,
+            'mean_value_swvl1': self.mean_value_swvl1,
+            'mean_value_tcc': self.mean_value_tcc,
+            'mean_value_tcrw': self.mean_value_tcrw,
+            'mean_value_tcwv': self.mean_value_tcwv,
+            'mean_value_tp': self.mean_value_tp,
+            'min_value_10u': self.min_value_10u,
+            'min_value_10v': self.min_value_10v,
+            'min_value_2d': self.min_value_2d,
+            'min_value_2t': self.min_value_2t,
+            'min_value_cp': self.min_value_cp,
+            'min_value_crr': self.min_value_crr,
+            'min_value_cvh': self.min_value_cvh,
+            'min_value_cvl': self.min_value_cvl,
+            'min_value_e': self.min_value_e,
+            'min_value_lmlt': self.min_value_lmlt,
+            'min_value_msl': self.min_value_msl,
+            'min_value_ro': self.min_value_ro,
+            'min_value_skt': self.min_value_skt,
+            'min_value_sp': self.min_value_sp,
+            'min_value_sro': self.min_value_sro,
+            'min_value_swvl1': self.min_value_swvl1,
+            'min_value_tcc': self.min_value_tcc,
+            'min_value_tcrw': self.min_value_tcrw,
+            'min_value_tcwv': self.min_value_tcwv,
+            'min_value_tp': self.min_value_tp,
+            'buffer_used': self.buffer_used,
+            'source_year': self.source_year,
+            'created_by': self.created_by,
+            'updated_by': self.updated_by
+        }
+    
+    def __repr__(self):
+        return f'<ClimateMonthly {self.kd_prov}/{self.kd_kab}/{self.kd_kec} {self.bulan}/{self.tahun}>'
