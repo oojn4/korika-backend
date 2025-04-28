@@ -14,153 +14,6 @@ import requests
 
 bp = Blueprint('data', __name__, url_prefix='')
 
-# ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
-
-# def allowed_file(filename):
-#     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# @bp.route('/upload', methods=['POST'])
-# @jwt_required()
-# def upload_malaria_data():
-#     # Cek user identity
-#     current_user_id = get_jwt_identity()
-    
-#     # Validasi request body
-#     if not request.is_json:
-#         return jsonify({'error': 'Request harus berupa JSON'}), 400
-    
-#     request_data = request.get_json()
-    
-#     if 'data' not in request_data or not isinstance(request_data['data'], list) or not request_data['data']:
-#         return jsonify({'error': 'Data tidak ditemukan atau format tidak valid'}), 400
-    
-#     excel_data = request_data['data']
-#     try:
-#         # Hasil proses
-#         result = {
-#             'health_facility_added': 0,
-#             'health_facility_existed': 0,
-#             'malaria_data_added': 0,
-#             'malaria_data_updated': 0,
-#             'errors': []
-#         }
-        
-#         # Proses baris per baris dari data JSON
-#         for index, row in enumerate(excel_data):
-#             try:
-#                 # Pastikan kolom yang diperlukan ada
-#                 required_columns = ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan']
-#                 missing_columns = [col for col in required_columns if col not in row]
-                
-#                 if missing_columns:
-#                     result['errors'].append(f'Baris ke-{index+1}: Kolom yang diperlukan tidak ditemukan: {missing_columns}')
-#                     continue
-                
-#                 id_faskes = row['id_faskes']
-#                 bulan = row['bulan']
-#                 tahun = row['tahun']
-                
-#                 # Proses HealthFacilityId (pastikan tidak duplikat)
-#                 existing_facility = HealthFacilityId.query.filter_by(
-#                     id_faskes=id_faskes,
-#                     provinsi=row['provinsi'],
-#                     kabupaten=row['kabupaten'],
-#                     kecamatan=row['kecamatan'],
-#                     nama_faskes=row.get('nama_faskes')
-#                 ).first()
-                
-#                 if not existing_facility:
-#                     # Tambahkan fasilitas kesehatan baru
-#                     new_facility = HealthFacilityId(
-#                         id_faskes=id_faskes,
-#                         provinsi=row['provinsi'],
-#                         kabupaten=row['kabupaten'],
-#                         kecamatan=row['kecamatan'],
-#                         owner=row.get('owner'),
-#                         tipe_faskes=row.get('tipe_faskes'),
-#                         nama_faskes=row.get('nama_faskes'),
-#                         address=row.get('address'),
-#                         url=row.get('url'),
-#                         lat=row.get('lat'),
-#                         lon=row.get('lon')
-#                     )
-                    
-#                     db.session.add(new_facility)
-#                     db.session.flush()  # Flush untuk mendapatkan ID yang baru dibuat
-#                     result['health_facility_added'] += 1
-#                 else:
-#                     result['health_facility_existed'] += 1
-                
-#                 # Proses MalariaHealthFacilityMonthly (update jika duplikat)
-#                 existing_data = MalariaHealthFacilityMonthly.query.filter_by(
-#                     id_faskes=id_faskes,
-#                     bulan=bulan,
-#                     tahun=tahun
-#                 ).first()
-                
-#                 # Siapkan data malaria
-#                 malaria_data = {
-#                     'id_faskes': id_faskes,
-#                     'bulan': bulan,
-#                     'tahun': tahun,
-#                     'status': 'actual',  # Pastikan status selalu "actual"
-#                 }
-                
-#                 # Tambahkan kolom lain jika tersedia di data JSON
-#                 # Add validation for data types
-#                 for column, value in row.items():
-#                     if column not in ['id_faskes', 'bulan', 'tahun', 'provinsi', 'kabupaten', 'kecamatan',
-#                                     'owner', 'tipe_faskes', 'nama_faskes', 'address', 'url', 'lat', 'lon']:
-#                         # Pastikan kolom ada di model MalariaHealthFacilityMonthly
-#                         if hasattr(MalariaHealthFacilityMonthly, column) and value is not None:
-#                             # Add type checking here
-#                             column_type = MalariaHealthFacilityMonthly.__table__.columns[column].type.python_type
-#                             try:
-#                                 # Cast value to appropriate type
-#                                 if column_type == float:
-#                                     malaria_data[column] = float(value)
-#                                 elif column_type == int:
-#                                     malaria_data[column] = int(value)
-#                                 elif column_type == str:
-#                                     malaria_data[column] = str(value)
-#                                 else:
-#                                     malaria_data[column] = value
-#                             except (ValueError, TypeError):
-#                                 # Handle type conversion errors
-#                                 error_msg = f"Error konversi tipe data untuk kolom {column}: nilai '{value}' tidak valid untuk tipe {column_type.__name__}"
-#                                 result['errors'].append(error_msg)
-#                                 continue
-                
-#                 if existing_data:
-#                     # Update data yang sudah ada
-#                     for key, value in malaria_data.items():
-#                         setattr(existing_data, key, value)
-#                     result['malaria_data_updated'] += 1
-#                 else:
-#                     # Tambahkan data baru
-#                     new_malaria_data = MalariaHealthFacilityMonthly(**malaria_data)
-#                     db.session.add(new_malaria_data)
-#                     result['malaria_data_added'] += 1
-                
-#             except Exception as e:
-#                 error_msg = f"Error pada baris ke-{index+1}: {str(e)}"
-#                 result['errors'].append(error_msg)
-        
-#         # Commit semua perubahan ke database
-#         db.session.commit()
-        
-#         return jsonify({
-#             'message': 'Data berhasil diproses',
-#             'result': result
-#         }), 200
-        
-#     except Exception as e:
-#         # Rollback jika terjadi error
-#         db.session.rollback()
-#         return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
-#     finally:
-#         db.session.close()
-
 @bp.route('/get-weather', methods=['GET'])
 def get_weather():
     try:
@@ -313,35 +166,52 @@ def get_warning_malaria():
                 "predicted_tot_pos": row.predicted_tot_pos,
                 "predicted_kematian_malaria": row.predicted_kematian_malaria,
                 "predicted_penularan_indigenus": row.predicted_penularan_indigenus,
-                "status":row.status
+                "status": row.status
             })
         
         previous_data_index = {
-                    (row['province'],row['city'], row['year'], row['month'], row['status']): row
+                    (row['province'], row['city'], row['year'], row['month'], row['status']): row
                     for row in malaria_data
         }
 
         # Hitung perubahan M-to-M dan Y-on-Y
         final_data = []
+        
         for row in malaria_data:
-            # Ambil data bulan sebelumnya
+            # Buat salinan dari row yang akan dimodifikasi
+            new_row = row.copy()
             
+            # Ambil data bulan sebelumnya
             if row['month'] == 1:  # January - look at previous year's December
-                prev_actual = previous_data_index.get((row['province'],row['city'], row['year'] - 1, 12, 'actual'))
-                prev_predicted = previous_data_index.get((row['province'],row['city'], row['year'] - 1, 12, 'predicted'))
+                prev_actual = previous_data_index.get((row['province'], row['city'], row['year'] - 1, 12, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['city'], row['year'] - 1, 12, 'predicted'))
             else:
-                prev_actual = previous_data_index.get((row['province'],row['city'], row['year'], row['month'] - 1, 'actual'))
-                prev_predicted = previous_data_index.get((row['province'],row['city'], row['year'], row['month'] - 1, 'predicted'))
+                prev_actual = previous_data_index.get((row['province'], row['city'], row['year'], row['month'] - 1, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['city'], row['year'], row['month'] - 1, 'predicted'))
 
             prev_row = prev_actual if prev_actual else prev_predicted
 
-            # Hitung perubahan M-to-M
-            for key in ['predicted_penularan_indigenus']:
-                if prev_row and row[key] and prev_row[key]:
-                    row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
+            # Ambil data tahun sebelumnya di bulan yang sama
+            yoy_actual = previous_data_index.get((row['province'], row['city'], row['year'] - 1, row['month'], 'actual'))
+            yoy_predicted = previous_data_index.get((row['province'], row['city'], row['year'] - 1, row['month'], 'predicted'))
+            yoy_row = yoy_actual if yoy_actual else yoy_predicted
+
+            # Hitung perubahan M-to-M dan Y-on-Y untuk semua metrik yang diperlukan
+            for key in ['predicted_penularan_indigenus', 'predicted_tot_pos']:
+                # M-to-M change
+                if prev_row and new_row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
+                    new_row[f'{key}_m_to_m_change'] = ((new_row[key] - prev_row[key]) / prev_row[key]) * 100
                 else:
-                    row[f'{key}_m_to_m_change'] = None     
-                final_data.append(row)   
+                    new_row[f'{key}_m_to_m_change'] = None
+                
+                # Y-on-Y change
+                if yoy_row and new_row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
+                    new_row[f'{key}_y_on_y_change'] = ((new_row[key] - yoy_row[key]) / yoy_row[key]) * 100
+                else:
+                    new_row[f'{key}_y_on_y_change'] = None
+            
+            # Tambahkan row yang telah diperbarui ke final_data
+            final_data.append(new_row)
         
         return jsonify({"data": final_data, "success": True}), 200
 
@@ -350,42 +220,182 @@ def get_warning_malaria():
     finally:
         db.session.close()
 
-# @bp.route('/get-facilities', methods=['GET'])
-# @jwt_required()
-# def get_facilities():
-#     """Get list of facilities for prediction"""
-#     try:
-#         province = request.args.get('province', default=None, type=str)
-#         kabupaten = request.args.get('kabupaten', default=None, type=str)
+@bp.route('/get-warning-lepto', methods=['GET'])
+@jwt_required()
+def get_warning_lepto():
+    try:
+        query = text("""
+        SELECT *
+        FROM
+        (SELECT hfi.kd_kab,hfi.kabkot,hfi.status_endemis,
+        hfi.kd_prov,hfi.provinsi,bulan as month,tahun as year,status,sum("LEP_K") as predicted_lep_k,sum("LEP_M") as predicted_lep_m
+        FROM lepto
+        JOIN 
+                                (
+                                select mp.provinsi,mk.*
+                                from masterkab mk
+                                left join masterprov mp 
+                                on mk.kd_prov = mp.kd_prov) hfi
+        ON lepto.kd_kab = hfi.kd_kab
+        GROUP BY hfi.kd_kab,hfi.kabkot,hfi.kd_prov,hfi.provinsi,status,bulan,tahun,status_endemis)
+    """)
+        # Eksekusi query
+        result = db.session.execute(query).fetchall()
+        # Format hasil query sesuai dengan data yang diambil
+        lepto_data = []
+        for row in result:
+            lepto_data.append({
+                "kd_kab": row.kd_kab,
+                "city": row.kabkot,
+                "status_endemis": row.status_endemis,
+                "kd_prov": row.kd_prov,
+                "province": row.provinsi,
+                "month": row.month,
+                "year": row.year,
+                "predicted_lep_k": row.predicted_lep_k,
+                "predicted_lep_m": row.predicted_lep_m,
+                "status": row.status
+            })
         
-#         query = HealthFacility.query
+        previous_data_index = {
+                    (row['province'], row['city'], row['year'], row['month'], row['status']): row
+                    for row in lepto_data
+        }
+
+        # Hitung perubahan M-to-M dan Y-on-Y
+        final_data = []
         
-#         if province and province != 'TOTAL':
-#             query = query.filter_by(provinsi=province)
-#         if kabupaten:
-#             query = query.filter_by(kabupaten=kabupaten)
+        for row in lepto_data:
+            # Buat salinan dari row yang akan dimodifikasi
+            new_row = row.copy()
             
-#         facilities = query.all()
+            # Ambil data bulan sebelumnya
+            if row['month'] == 1:  # January - look at previous year's December
+                prev_actual = previous_data_index.get((row['province'], row['city'], row['year'] - 1, 12, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['city'], row['year'] - 1, 12, 'predicted'))
+            else:
+                prev_actual = previous_data_index.get((row['province'], row['city'], row['year'], row['month'] - 1, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['city'], row['year'], row['month'] - 1, 'predicted'))
+
+            prev_row = prev_actual if prev_actual else prev_predicted
+
+            # Ambil data tahun sebelumnya di bulan yang sama
+            yoy_actual = previous_data_index.get((row['province'], row['city'], row['year'] - 1, row['month'], 'actual'))
+            yoy_predicted = previous_data_index.get((row['province'], row['city'], row['year'] - 1, row['month'], 'predicted'))
+            yoy_row = yoy_actual if yoy_actual else yoy_predicted
+
+            # Hitung perubahan M-to-M dan Y-on-Y untuk semua metrik yang diperlukan
+            for key in ['predicted_lep_k', 'predicted_lep_m']:
+                # M-to-M change
+                if prev_row and new_row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
+                    new_row[f'{key}_m_to_m_change'] = ((new_row[key] - prev_row[key]) / prev_row[key]) * 100
+                else:
+                    new_row[f'{key}_m_to_m_change'] = None
+                
+                # Y-on-Y change
+                if yoy_row and new_row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
+                    new_row[f'{key}_y_on_y_change'] = ((new_row[key] - yoy_row[key]) / yoy_row[key]) * 100
+                else:
+                    new_row[f'{key}_y_on_y_change'] = None
+            
+            # Tambahkan row yang telah diperbarui ke final_data
+            final_data.append(new_row)
         
-#         return jsonify({
-#             "success": True,
-#             "facilities": [{
-#                 "id_faskes": f.id_faskes,
-#                 "nama_faskes": f.nama_faskes,
-#                 "tipe_faskes": f.tipe_faskes,
-#                 "provinsi": f.provinsi,
-#                 "kabupaten": f.kabupaten,
-#                 "kecamatan": f.kecamatan
-#             } for f in facilities]
-#         }), 200
+        return jsonify({"data": final_data, "success": True}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.close()
+
+@bp.route('/get-warning-dbd', methods=['GET'])
+@jwt_required()
+def get_warning_dbd():
+    try:
+        query = text("""
+        SELECT *
+        FROM
+        (SELECT hfi.kd_kab,hfi.kabkot,hfi.status_endemis,
+        hfi.kd_prov,hfi.provinsi,bulan as month,tahun as year,status,sum("DBD_P") as predicted_dbd_p,sum("DBD_M") as predicted_dbd_m
+        FROM dbd
+        JOIN 
+                                (
+                                select mp.provinsi,mk.*
+                                from masterkab mk
+                                left join masterprov mp 
+                                on mk.kd_prov = mp.kd_prov) hfi
+        ON dbd.kd_kab = hfi.kd_kab
+        GROUP BY hfi.kd_kab,hfi.kabkot,hfi.kd_prov,hfi.provinsi,status,bulan,tahun,status_endemis)
+    """)
+        # Eksekusi query
+        result = db.session.execute(query).fetchall()
+        # Format hasil query sesuai dengan data yang diambil
+        lepto_data = []
+        for row in result:
+            lepto_data.append({
+                "kd_kab": row.kd_kab,
+                "city": row.kabkot,
+                "status_endemis": row.status_endemis,
+                "kd_prov": row.kd_prov,
+                "province": row.provinsi,
+                "month": row.month,
+                "year": row.year,
+                "predicted_dbd_p": row.predicted_dbd_p,
+                "predicted_dbd_m": row.predicted_dbd_m,
+                "status": row.status
+            })
         
-#     except Exception as e:
-#         return jsonify({
-#             "success": False,
-#             "error": str(e)
-#         }), 500
-#     finally:
-#         db.session.close()
+        previous_data_index = {
+                    (row['province'], row['city'], row['year'], row['month'], row['status']): row
+                    for row in lepto_data
+        }
+
+        # Hitung perubahan M-to-M dan Y-on-Y
+        final_data = []
+        
+        for row in lepto_data:
+            # Buat salinan dari row yang akan dimodifikasi
+            new_row = row.copy()
+            
+            # Ambil data bulan sebelumnya
+            if row['month'] == 1:  # January - look at previous year's December
+                prev_actual = previous_data_index.get((row['province'], row['city'], row['year'] - 1, 12, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['city'], row['year'] - 1, 12, 'predicted'))
+            else:
+                prev_actual = previous_data_index.get((row['province'], row['city'], row['year'], row['month'] - 1, 'actual'))
+                prev_predicted = previous_data_index.get((row['province'], row['city'], row['year'], row['month'] - 1, 'predicted'))
+
+            prev_row = prev_actual if prev_actual else prev_predicted
+
+            # Ambil data tahun sebelumnya di bulan yang sama
+            yoy_actual = previous_data_index.get((row['province'], row['city'], row['year'] - 1, row['month'], 'actual'))
+            yoy_predicted = previous_data_index.get((row['province'], row['city'], row['year'] - 1, row['month'], 'predicted'))
+            yoy_row = yoy_actual if yoy_actual else yoy_predicted
+
+            # Hitung perubahan M-to-M dan Y-on-Y untuk semua metrik yang diperlukan
+            for key in ['predicted_dbd_m', 'predicted_dbd_p']:
+                # M-to-M change
+                if prev_row and new_row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
+                    new_row[f'{key}_m_to_m_change'] = ((new_row[key] - prev_row[key]) / prev_row[key]) * 100
+                else:
+                    new_row[f'{key}_m_to_m_change'] = None
+                
+                # Y-on-Y change
+                if yoy_row and new_row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
+                    new_row[f'{key}_y_on_y_change'] = ((new_row[key] - yoy_row[key]) / yoy_row[key]) * 100
+                else:
+                    new_row[f'{key}_y_on_y_change'] = None
+            
+            # Tambahkan row yang telah diperbarui ke final_data
+            final_data.append(new_row)
+        
+        return jsonify({"data": final_data, "success": True}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.session.close()
+
 
 @bp.route('/get-raw-data-malaria', methods=['GET'])
 @jwt_required()
@@ -1833,12 +1843,93 @@ def get_aggregate_data_dbd():
             GROUP BY 
                 hfi.kd_prov, hfi.kd_kab, hfi.provinsi, hfi.kabkot, dk.tahun, dk.bulan, dk.status
             )
-            SELECT 
-                *
-            FROM 
-                combined_data
-            WHERE 
-                kd_prov = :province and kd_kab = :city
+              SELECT 
+                    combined_data.*,
+                    AVG(climatemonthly.hujan_hujan_mean) as hujan_mean,
+                    AVG(climatemonthly.hujan_hujan_max) as hujan_max,
+                    AVG(climatemonthly.hujan_hujan_min) as hujan_min,
+                    AVG(climatemonthly.rh_rh_mean) as rh_mean,
+                    AVG(climatemonthly.rh_rh_max) as rh_max,
+                    AVG(climatemonthly.rh_rh_min) as rh_min,
+                    AVG(climatemonthly.tm_tm_mean) as tm_mean,
+                    AVG(climatemonthly.tm_tm_max) as tm_max,
+                    AVG(climatemonthly.tm_tm_min) as tm_min,
+                    AVG(climatemonthly.max_value_10u) as max_value_10u,
+                    AVG(climatemonthly.max_value_10v) as max_value_10v,
+                    AVG(climatemonthly.max_value_2d) as max_value_2d,
+                    AVG(climatemonthly.max_value_2t) as max_value_2t,
+                    AVG(climatemonthly.max_value_cp) as max_value_cp,
+                    AVG(climatemonthly.max_value_crr) as max_value_crr,
+                    AVG(climatemonthly.max_value_cvh) as max_value_cvh,
+                    AVG(climatemonthly.max_value_cvl) as max_value_cvl,
+                    AVG(climatemonthly.max_value_e) as max_value_e,
+                    AVG(climatemonthly.max_value_lmlt) as max_value_lmlt,
+                    AVG(climatemonthly.max_value_msl) as max_value_msl,
+                    AVG(climatemonthly.max_value_ro) as max_value_ro,
+                    AVG(climatemonthly.max_value_skt) as max_value_skt,
+                    AVG(climatemonthly.max_value_sp) as max_value_sp,
+                    AVG(climatemonthly.max_value_sro) as max_value_sro,
+                    AVG(climatemonthly.max_value_swvl1) as max_value_swvl1,
+                    AVG(climatemonthly.max_value_tcc) as max_value_tcc,
+                    AVG(climatemonthly.max_value_tcrw) as max_value_tcrw,
+                    AVG(climatemonthly.max_value_tcwv) as max_value_tcwv,
+                    AVG(climatemonthly.max_value_tp) as max_value_tp,
+                    AVG(climatemonthly.mean_value_10u) as mean_value_10u,
+                    AVG(climatemonthly.mean_value_10v) as mean_value_10v,
+                    AVG(climatemonthly.mean_value_2d) as mean_value_2d,
+                    AVG(climatemonthly.mean_value_2t) as mean_value_2t,
+                    AVG(climatemonthly.mean_value_cp) as mean_value_cp,
+                    AVG(climatemonthly.mean_value_crr) as mean_value_crr,
+                    AVG(climatemonthly.mean_value_cvh) as mean_value_cvh,
+                    AVG(climatemonthly.mean_value_cvl) as mean_value_cvl,
+                    AVG(climatemonthly.mean_value_e) as mean_value_e,
+                    AVG(climatemonthly.mean_value_lmlt) as mean_value_lmlt,
+                    AVG(climatemonthly.mean_value_msl) as mean_value_msl,
+                    AVG(climatemonthly.mean_value_ro) as mean_value_ro,
+                    AVG(climatemonthly.mean_value_skt) as mean_value_skt,
+                    AVG(climatemonthly.mean_value_sp) as mean_value_sp,
+                    AVG(climatemonthly.mean_value_sro) as mean_value_sro,
+                    AVG(climatemonthly.mean_value_swvl1) as mean_value_swvl1,
+                    AVG(climatemonthly.mean_value_tcc) as mean_value_tcc,
+                    AVG(climatemonthly.mean_value_tcrw) as mean_value_tcrw,
+                    AVG(climatemonthly.mean_value_tcwv) as mean_value_tcwv,
+                    AVG(climatemonthly.mean_value_tp) as mean_value_tp,
+                    AVG(climatemonthly.min_value_10u) as min_value_10u,
+                    AVG(climatemonthly.min_value_10v) as min_value_10v,
+                    AVG(climatemonthly.min_value_2d) as min_value_2d,
+                    AVG(climatemonthly.min_value_2t) as min_value_2t,
+                    AVG(climatemonthly.min_value_cp) as min_value_cp,
+                    AVG(climatemonthly.min_value_crr) as min_value_crr,
+                    AVG(climatemonthly.min_value_cvh) as min_value_cvh,
+                    AVG(climatemonthly.min_value_cvl) as min_value_cvl,
+                    AVG(climatemonthly.min_value_e) as min_value_e,
+                    AVG(climatemonthly.min_value_lmlt) as min_value_lmlt,
+                    AVG(climatemonthly.min_value_msl) as min_value_msl,
+                    AVG(climatemonthly.min_value_ro) as min_value_ro,
+                    AVG(climatemonthly.min_value_skt) as min_value_skt,
+                    AVG(climatemonthly.min_value_sp) as min_value_sp,
+                    AVG(climatemonthly.min_value_sro) as min_value_sro,
+                    AVG(climatemonthly.min_value_swvl1) as min_value_swvl1,
+                    AVG(climatemonthly.min_value_tcc) as min_value_tcc,
+                    AVG(climatemonthly.min_value_tcrw) as min_value_tcrw,
+                    AVG(climatemonthly.min_value_tcwv) as min_value_tcwv,
+                    AVG(climatemonthly.min_value_tp) as min_value_tp
+                FROM 
+                    combined_data
+                LEFT JOIN
+                    climatemonthly
+                ON 
+                    combined_data.kd_kab = climatemonthly.kd_kab
+                    AND combined_data.year = climatemonthly.tahun
+                    AND combined_data.month = climatemonthly.bulan
+                WHERE 
+                     combined_data.kd_prov = :province and combined_data.kd_kab = :city
+                GROUP BY
+                    combined_data.kd_prov, combined_data.kd_kab, 
+                    combined_data.province, combined_data.city,
+                    combined_data.year, combined_data.month, combined_data.status,
+                    combined_data.dbd_p,combined_data.dbd_m
+            
             """)
 
             # Tambahkan kondisi untuk rentang tanggal
@@ -1877,7 +1968,24 @@ def get_aggregate_data_dbd():
                 prev_row = prev_actual if prev_actual else prev_predicted
 
                 # Hitung perubahan M-to-M
-                for key in ['dbd_p', 'dbd_m']:
+                for key in ['dbd_p', 'dbd_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if prev_row and row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
                         row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
                     else:
@@ -1889,7 +1997,24 @@ def get_aggregate_data_dbd():
                 yoy_row = yoy_actual if yoy_actual else yoy_predicted
 
                 # Hitung perubahan Y-on-Y
-                for key in ['dbd_p', 'dbd_m']:
+                for key in ['dbd_p', 'dbd_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if yoy_row and row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
                         row[f'{key}_y_on_y_change'] = ((row[key] - yoy_row[key]) / yoy_row[key]) * 100
                     else:
@@ -1947,13 +2072,255 @@ def get_aggregate_data_dbd():
                     GROUP BY 
                         hfi.kd_prov, hfi.provinsi, dk.tahun, dk.bulan, dk.status
                 )
+            ),
+            aggregated_climate AS (
+                (
+                    -- Total average for all provinces (for the '00' code)
+                    SELECT
+                        '00' as kd_prov,
+                        climatemonthly.tahun,
+                        climatemonthly.bulan,
+                        AVG(climatemonthly.hujan_hujan_mean) as hujan_mean,
+                        AVG(climatemonthly.hujan_hujan_max) as hujan_max,
+                        AVG(climatemonthly.hujan_hujan_min) as hujan_min,
+                        AVG(climatemonthly.rh_rh_mean) as rh_mean,
+                        AVG(climatemonthly.rh_rh_max) as rh_max,
+                        AVG(climatemonthly.rh_rh_min) as rh_min,
+                        AVG(climatemonthly.tm_tm_mean) as tm_mean,
+                        AVG(climatemonthly.tm_tm_max) as tm_max,
+                        AVG(climatemonthly.tm_tm_min) as tm_min,
+                        AVG(climatemonthly.max_value_10u) as max_value_10u,
+                        AVG(climatemonthly.max_value_10v) as max_value_10v,
+                        AVG(climatemonthly.max_value_2d) as max_value_2d,
+                        AVG(climatemonthly.max_value_2t) as max_value_2t,
+                        AVG(climatemonthly.max_value_cp) as max_value_cp,
+                        AVG(climatemonthly.max_value_crr) as max_value_crr,
+                        AVG(climatemonthly.max_value_cvh) as max_value_cvh,
+                        AVG(climatemonthly.max_value_cvl) as max_value_cvl,
+                        AVG(climatemonthly.max_value_e) as max_value_e,
+                        AVG(climatemonthly.max_value_lmlt) as max_value_lmlt,
+                        AVG(climatemonthly.max_value_msl) as max_value_msl,
+                        AVG(climatemonthly.max_value_ro) as max_value_ro,
+                        AVG(climatemonthly.max_value_skt) as max_value_skt,
+                        AVG(climatemonthly.max_value_sp) as max_value_sp,
+                        AVG(climatemonthly.max_value_sro) as max_value_sro,
+                        AVG(climatemonthly.max_value_swvl1) as max_value_swvl1,
+                        AVG(climatemonthly.max_value_tcc) as max_value_tcc,
+                        AVG(climatemonthly.max_value_tcrw) as max_value_tcrw,
+                        AVG(climatemonthly.max_value_tcwv) as max_value_tcwv,
+                        AVG(climatemonthly.max_value_tp) as max_value_tp,
+                        AVG(climatemonthly.mean_value_10u) as mean_value_10u,
+                        AVG(climatemonthly.mean_value_10v) as mean_value_10v,
+                        AVG(climatemonthly.mean_value_2d) as mean_value_2d,
+                        AVG(climatemonthly.mean_value_2t) as mean_value_2t,
+                        AVG(climatemonthly.mean_value_cp) as mean_value_cp,
+                        AVG(climatemonthly.mean_value_crr) as mean_value_crr,
+                        AVG(climatemonthly.mean_value_cvh) as mean_value_cvh,
+                        AVG(climatemonthly.mean_value_cvl) as mean_value_cvl,
+                        AVG(climatemonthly.mean_value_e) as mean_value_e,
+                        AVG(climatemonthly.mean_value_lmlt) as mean_value_lmlt,
+                        AVG(climatemonthly.mean_value_msl) as mean_value_msl,
+                        AVG(climatemonthly.mean_value_ro) as mean_value_ro,
+                        AVG(climatemonthly.mean_value_skt) as mean_value_skt,
+                        AVG(climatemonthly.mean_value_sp) as mean_value_sp,
+                        AVG(climatemonthly.mean_value_sro) as mean_value_sro,
+                        AVG(climatemonthly.mean_value_swvl1) as mean_value_swvl1,
+                        AVG(climatemonthly.mean_value_tcc) as mean_value_tcc,
+                        AVG(climatemonthly.mean_value_tcrw) as mean_value_tcrw,
+                        AVG(climatemonthly.mean_value_tcwv) as mean_value_tcwv,
+                        AVG(climatemonthly.mean_value_tp) as mean_value_tp,
+                        AVG(climatemonthly.min_value_10u) as min_value_10u,
+                        AVG(climatemonthly.min_value_10v) as min_value_10v,
+                        AVG(climatemonthly.min_value_2d) as min_value_2d,
+                        AVG(climatemonthly.min_value_2t) as min_value_2t,
+                        AVG(climatemonthly.min_value_cp) as min_value_cp,
+                        AVG(climatemonthly.min_value_crr) as min_value_crr,
+                        AVG(climatemonthly.min_value_cvh) as min_value_cvh,
+                        AVG(climatemonthly.min_value_cvl) as min_value_cvl,
+                        AVG(climatemonthly.min_value_e) as min_value_e,
+                        AVG(climatemonthly.min_value_lmlt) as min_value_lmlt,
+                        AVG(climatemonthly.min_value_msl) as min_value_msl,
+                        AVG(climatemonthly.min_value_ro) as min_value_ro,
+                        AVG(climatemonthly.min_value_skt) as min_value_skt,
+                        AVG(climatemonthly.min_value_sp) as min_value_sp,
+                        AVG(climatemonthly.min_value_sro) as min_value_sro,
+                        AVG(climatemonthly.min_value_swvl1) as min_value_swvl1,
+                        AVG(climatemonthly.min_value_tcc) as min_value_tcc,
+                        AVG(climatemonthly.min_value_tcrw) as min_value_tcrw,
+                        AVG(climatemonthly.min_value_tcwv) as min_value_tcwv,
+                        AVG(climatemonthly.min_value_tp) as min_value_tp
+                    FROM 
+                        climatemonthly
+                    GROUP BY
+                        climatemonthly.tahun, climatemonthly.bulan
+                )
+                UNION ALL
+                (
+                    -- Province-specific averages
+                    SELECT
+                        mkec.kd_prov,
+                        climatemonthly.tahun,
+                        climatemonthly.bulan,
+                        AVG(climatemonthly.hujan_hujan_mean) as hujan_mean,
+                        AVG(climatemonthly.hujan_hujan_max) as hujan_max,
+                        AVG(climatemonthly.hujan_hujan_min) as hujan_min,
+                        AVG(climatemonthly.rh_rh_mean) as rh_mean,
+                        AVG(climatemonthly.rh_rh_max) as rh_max,
+                        AVG(climatemonthly.rh_rh_min) as rh_min,
+                        AVG(climatemonthly.tm_tm_mean) as tm_mean,
+                        AVG(climatemonthly.tm_tm_max) as tm_max,
+                        AVG(climatemonthly.tm_tm_min) as tm_min,
+                        AVG(climatemonthly.max_value_10u) as max_value_10u,
+                        AVG(climatemonthly.max_value_10v) as max_value_10v,
+                        AVG(climatemonthly.max_value_2d) as max_value_2d,
+                        AVG(climatemonthly.max_value_2t) as max_value_2t,
+                        AVG(climatemonthly.max_value_cp) as max_value_cp,
+                        AVG(climatemonthly.max_value_crr) as max_value_crr,
+                        AVG(climatemonthly.max_value_cvh) as max_value_cvh,
+                        AVG(climatemonthly.max_value_cvl) as max_value_cvl,
+                        AVG(climatemonthly.max_value_e) as max_value_e,
+                        AVG(climatemonthly.max_value_lmlt) as max_value_lmlt,
+                        AVG(climatemonthly.max_value_msl) as max_value_msl,
+                        AVG(climatemonthly.max_value_ro) as max_value_ro,
+                        AVG(climatemonthly.max_value_skt) as max_value_skt,
+                        AVG(climatemonthly.max_value_sp) as max_value_sp,
+                        AVG(climatemonthly.max_value_sro) as max_value_sro,
+                        AVG(climatemonthly.max_value_swvl1) as max_value_swvl1,
+                        AVG(climatemonthly.max_value_tcc) as max_value_tcc,
+                        AVG(climatemonthly.max_value_tcrw) as max_value_tcrw,
+                        AVG(climatemonthly.max_value_tcwv) as max_value_tcwv,
+                        AVG(climatemonthly.max_value_tp) as max_value_tp,
+                        AVG(climatemonthly.mean_value_10u) as mean_value_10u,
+                        AVG(climatemonthly.mean_value_10v) as mean_value_10v,
+                        AVG(climatemonthly.mean_value_2d) as mean_value_2d,
+                        AVG(climatemonthly.mean_value_2t) as mean_value_2t,
+                        AVG(climatemonthly.mean_value_cp) as mean_value_cp,
+                        AVG(climatemonthly.mean_value_crr) as mean_value_crr,
+                        AVG(climatemonthly.mean_value_cvh) as mean_value_cvh,
+                        AVG(climatemonthly.mean_value_cvl) as mean_value_cvl,
+                        AVG(climatemonthly.mean_value_e) as mean_value_e,
+                        AVG(climatemonthly.mean_value_lmlt) as mean_value_lmlt,
+                        AVG(climatemonthly.mean_value_msl) as mean_value_msl,
+                        AVG(climatemonthly.mean_value_ro) as mean_value_ro,
+                        AVG(climatemonthly.mean_value_skt) as mean_value_skt,
+                        AVG(climatemonthly.mean_value_sp) as mean_value_sp,
+                        AVG(climatemonthly.mean_value_sro) as mean_value_sro,
+                        AVG(climatemonthly.mean_value_swvl1) as mean_value_swvl1,
+                        AVG(climatemonthly.mean_value_tcc) as mean_value_tcc,
+                        AVG(climatemonthly.mean_value_tcrw) as mean_value_tcrw,
+                        AVG(climatemonthly.mean_value_tcwv) as mean_value_tcwv,
+                        AVG(climatemonthly.mean_value_tp) as mean_value_tp,
+                        AVG(climatemonthly.min_value_10u) as min_value_10u,
+                        AVG(climatemonthly.min_value_10v) as min_value_10v,
+                        AVG(climatemonthly.min_value_2d) as min_value_2d,
+                        AVG(climatemonthly.min_value_2t) as min_value_2t,
+                        AVG(climatemonthly.min_value_cp) as min_value_cp,
+                        AVG(climatemonthly.min_value_crr) as min_value_crr,
+                        AVG(climatemonthly.min_value_cvh) as min_value_cvh,
+                        AVG(climatemonthly.min_value_cvl) as min_value_cvl,
+                        AVG(climatemonthly.min_value_e) as min_value_e,
+                        AVG(climatemonthly.min_value_lmlt) as min_value_lmlt,
+                        AVG(climatemonthly.min_value_msl) as min_value_msl,
+                        AVG(climatemonthly.min_value_ro) as min_value_ro,
+                        AVG(climatemonthly.min_value_skt) as min_value_skt,
+                        AVG(climatemonthly.min_value_sp) as min_value_sp,
+                        AVG(climatemonthly.min_value_sro) as min_value_sro,
+                        AVG(climatemonthly.min_value_swvl1) as min_value_swvl1,
+                        AVG(climatemonthly.min_value_tcc) as min_value_tcc,
+                        AVG(climatemonthly.min_value_tcrw) as min_value_tcrw,
+                        AVG(climatemonthly.min_value_tcwv) as min_value_tcwv,
+                        AVG(climatemonthly.min_value_tp) as min_value_tp
+                    FROM 
+                        climatemonthly
+                    JOIN
+                        masterkec mkec
+                    ON 
+                        climatemonthly.kd_kec = mkec.kd_kec
+                    GROUP BY
+                        mkec.kd_prov, climatemonthly.tahun, climatemonthly.bulan
+                )
             )
             SELECT 
-                *
+                cd.*,
+                ac.hujan_mean,
+                ac.hujan_max,
+                ac.hujan_min,
+                ac.rh_mean,
+                ac.rh_max,
+                ac.rh_min,
+                ac.tm_mean,
+                ac.tm_max,
+                ac.tm_min,
+                ac.max_value_10u,
+                ac.max_value_10v,
+                ac.max_value_2d,
+                ac.max_value_2t,
+                ac.max_value_cp,
+                ac.max_value_crr,
+                ac.max_value_cvh,
+                ac.max_value_cvl,
+                ac.max_value_e,
+                ac.max_value_lmlt,
+                ac.max_value_msl,
+                ac.max_value_ro,
+                ac.max_value_skt,
+                ac.max_value_sp,
+                ac.max_value_sro,
+                ac.max_value_swvl1,
+                ac.max_value_tcc,
+                ac.max_value_tcrw,
+                ac.max_value_tcwv,
+                ac.max_value_tp,
+                ac.mean_value_10u,
+                ac.mean_value_10v,
+                ac.mean_value_2d,
+                ac.mean_value_2t,
+                ac.mean_value_cp,
+                ac.mean_value_crr,
+                ac.mean_value_cvh,
+                ac.mean_value_cvl,
+                ac.mean_value_e,
+                ac.mean_value_lmlt,
+                ac.mean_value_msl,
+                ac.mean_value_ro,
+                ac.mean_value_skt,
+                ac.mean_value_sp,
+                ac.mean_value_sro,
+                ac.mean_value_swvl1,
+                ac.mean_value_tcc,
+                ac.mean_value_tcrw,
+                ac.mean_value_tcwv,
+                ac.mean_value_tp,
+                ac.min_value_10u,
+                ac.min_value_10v,
+                ac.min_value_2d,
+                ac.min_value_2t,
+                ac.min_value_cp,
+                ac.min_value_crr,
+                ac.min_value_cvh,
+                ac.min_value_cvl,
+                ac.min_value_e,
+                ac.min_value_lmlt,
+                ac.min_value_msl,
+                ac.min_value_ro,
+                ac.min_value_skt,
+                ac.min_value_sp,
+                ac.min_value_sro,
+                ac.min_value_swvl1,
+                ac.min_value_tcc,
+                ac.min_value_tcrw,
+                ac.min_value_tcwv,
+                ac.min_value_tp
             FROM 
-                combined_data
+                combined_data cd
+            LEFT JOIN
+                aggregated_climate ac
+            ON 
+                cd.kd_prov = ac.kd_prov
+                AND cd.year = ac.tahun
+                AND cd.month = ac.bulan
             WHERE 
-                kd_prov = :province
+                cd.kd_prov = :province
             """)
 
             # Tambahkan kondisi untuk rentang tanggal
@@ -1991,7 +2358,24 @@ def get_aggregate_data_dbd():
                 prev_row = prev_actual if prev_actual else prev_predicted
 
                 # Hitung perubahan M-to-M
-                for key in ['dbd_p', 'dbd_m']:
+                for key in ['dbd_p', 'dbd_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if prev_row and row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
                         row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
                     else:
@@ -2003,7 +2387,24 @@ def get_aggregate_data_dbd():
                 yoy_row = yoy_actual if yoy_actual else yoy_predicted
 
                 # Hitung perubahan Y-on-Y
-                for key in ['dbd_p', 'dbd_m']:
+                for key in ['dbd_p', 'dbd_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if yoy_row and row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
                         row[f'{key}_y_on_y_change'] = ((row[key] - yoy_row[key]) / yoy_row[key]) * 100
                     else:
@@ -2232,12 +2633,94 @@ def get_aggregate_data_lepto():
             GROUP BY 
                 hfi.kd_prov, hfi.kd_kab, hfi.provinsi, hfi.kabkot, lk.tahun, lk.bulan, lk.status
             )
-            SELECT 
-                *
-            FROM 
-                combined_data
-            WHERE 
-                kd_prov = :province and kd_kab = :city
+            
+              SELECT 
+                    combined_data.*,
+                    AVG(climatemonthly.hujan_hujan_mean) as hujan_mean,
+                    AVG(climatemonthly.hujan_hujan_max) as hujan_max,
+                    AVG(climatemonthly.hujan_hujan_min) as hujan_min,
+                    AVG(climatemonthly.rh_rh_mean) as rh_mean,
+                    AVG(climatemonthly.rh_rh_max) as rh_max,
+                    AVG(climatemonthly.rh_rh_min) as rh_min,
+                    AVG(climatemonthly.tm_tm_mean) as tm_mean,
+                    AVG(climatemonthly.tm_tm_max) as tm_max,
+                    AVG(climatemonthly.tm_tm_min) as tm_min,
+                    AVG(climatemonthly.max_value_10u) as max_value_10u,
+                    AVG(climatemonthly.max_value_10v) as max_value_10v,
+                    AVG(climatemonthly.max_value_2d) as max_value_2d,
+                    AVG(climatemonthly.max_value_2t) as max_value_2t,
+                    AVG(climatemonthly.max_value_cp) as max_value_cp,
+                    AVG(climatemonthly.max_value_crr) as max_value_crr,
+                    AVG(climatemonthly.max_value_cvh) as max_value_cvh,
+                    AVG(climatemonthly.max_value_cvl) as max_value_cvl,
+                    AVG(climatemonthly.max_value_e) as max_value_e,
+                    AVG(climatemonthly.max_value_lmlt) as max_value_lmlt,
+                    AVG(climatemonthly.max_value_msl) as max_value_msl,
+                    AVG(climatemonthly.max_value_ro) as max_value_ro,
+                    AVG(climatemonthly.max_value_skt) as max_value_skt,
+                    AVG(climatemonthly.max_value_sp) as max_value_sp,
+                    AVG(climatemonthly.max_value_sro) as max_value_sro,
+                    AVG(climatemonthly.max_value_swvl1) as max_value_swvl1,
+                    AVG(climatemonthly.max_value_tcc) as max_value_tcc,
+                    AVG(climatemonthly.max_value_tcrw) as max_value_tcrw,
+                    AVG(climatemonthly.max_value_tcwv) as max_value_tcwv,
+                    AVG(climatemonthly.max_value_tp) as max_value_tp,
+                    AVG(climatemonthly.mean_value_10u) as mean_value_10u,
+                    AVG(climatemonthly.mean_value_10v) as mean_value_10v,
+                    AVG(climatemonthly.mean_value_2d) as mean_value_2d,
+                    AVG(climatemonthly.mean_value_2t) as mean_value_2t,
+                    AVG(climatemonthly.mean_value_cp) as mean_value_cp,
+                    AVG(climatemonthly.mean_value_crr) as mean_value_crr,
+                    AVG(climatemonthly.mean_value_cvh) as mean_value_cvh,
+                    AVG(climatemonthly.mean_value_cvl) as mean_value_cvl,
+                    AVG(climatemonthly.mean_value_e) as mean_value_e,
+                    AVG(climatemonthly.mean_value_lmlt) as mean_value_lmlt,
+                    AVG(climatemonthly.mean_value_msl) as mean_value_msl,
+                    AVG(climatemonthly.mean_value_ro) as mean_value_ro,
+                    AVG(climatemonthly.mean_value_skt) as mean_value_skt,
+                    AVG(climatemonthly.mean_value_sp) as mean_value_sp,
+                    AVG(climatemonthly.mean_value_sro) as mean_value_sro,
+                    AVG(climatemonthly.mean_value_swvl1) as mean_value_swvl1,
+                    AVG(climatemonthly.mean_value_tcc) as mean_value_tcc,
+                    AVG(climatemonthly.mean_value_tcrw) as mean_value_tcrw,
+                    AVG(climatemonthly.mean_value_tcwv) as mean_value_tcwv,
+                    AVG(climatemonthly.mean_value_tp) as mean_value_tp,
+                    AVG(climatemonthly.min_value_10u) as min_value_10u,
+                    AVG(climatemonthly.min_value_10v) as min_value_10v,
+                    AVG(climatemonthly.min_value_2d) as min_value_2d,
+                    AVG(climatemonthly.min_value_2t) as min_value_2t,
+                    AVG(climatemonthly.min_value_cp) as min_value_cp,
+                    AVG(climatemonthly.min_value_crr) as min_value_crr,
+                    AVG(climatemonthly.min_value_cvh) as min_value_cvh,
+                    AVG(climatemonthly.min_value_cvl) as min_value_cvl,
+                    AVG(climatemonthly.min_value_e) as min_value_e,
+                    AVG(climatemonthly.min_value_lmlt) as min_value_lmlt,
+                    AVG(climatemonthly.min_value_msl) as min_value_msl,
+                    AVG(climatemonthly.min_value_ro) as min_value_ro,
+                    AVG(climatemonthly.min_value_skt) as min_value_skt,
+                    AVG(climatemonthly.min_value_sp) as min_value_sp,
+                    AVG(climatemonthly.min_value_sro) as min_value_sro,
+                    AVG(climatemonthly.min_value_swvl1) as min_value_swvl1,
+                    AVG(climatemonthly.min_value_tcc) as min_value_tcc,
+                    AVG(climatemonthly.min_value_tcrw) as min_value_tcrw,
+                    AVG(climatemonthly.min_value_tcwv) as min_value_tcwv,
+                    AVG(climatemonthly.min_value_tp) as min_value_tp
+                FROM 
+                    combined_data
+                LEFT JOIN
+                    climatemonthly
+                ON 
+                    combined_data.kd_kab = climatemonthly.kd_kab
+                    AND combined_data.year = climatemonthly.tahun
+                    AND combined_data.month = climatemonthly.bulan
+                WHERE 
+                     combined_data.kd_prov = :province and combined_data.kd_kab = :city
+                GROUP BY
+                    combined_data.kd_prov, combined_data.kd_kab, 
+                    combined_data.province, combined_data.city,
+                    combined_data.year, combined_data.month, combined_data.status,
+                    combined_data.lep_k,combined_data.lep_m
+            
             """)
 
             # Tambahkan kondisi untuk rentang tanggal
@@ -2276,7 +2759,24 @@ def get_aggregate_data_lepto():
                 prev_row = prev_actual if prev_actual else prev_predicted
 
                 # Hitung perubahan M-to-M
-                for key in ['lep_k', 'lep_m']:
+                for key in ['lep_k', 'lep_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if prev_row and row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
                         row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
                     else:
@@ -2288,7 +2788,24 @@ def get_aggregate_data_lepto():
                 yoy_row = yoy_actual if yoy_actual else yoy_predicted
 
                 # Hitung perubahan Y-on-Y
-                for key in ['lep_k', 'lep_m']:
+                for key in ['lep_k', 'lep_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if yoy_row and row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
                         row[f'{key}_y_on_y_change'] = ((row[key] - yoy_row[key]) / yoy_row[key]) * 100
                     else:
@@ -2347,12 +2864,256 @@ def get_aggregate_data_lepto():
                         hfi.kd_prov, hfi.provinsi, lk.tahun, lk.bulan, lk.status
                 )
             )
+            ,
+            aggregated_climate AS (
+                (
+                    -- Total average for all provinces (for the '00' code)
+                    SELECT
+                        '00' as kd_prov,
+                        climatemonthly.tahun,
+                        climatemonthly.bulan,
+                        AVG(climatemonthly.hujan_hujan_mean) as hujan_mean,
+                        AVG(climatemonthly.hujan_hujan_max) as hujan_max,
+                        AVG(climatemonthly.hujan_hujan_min) as hujan_min,
+                        AVG(climatemonthly.rh_rh_mean) as rh_mean,
+                        AVG(climatemonthly.rh_rh_max) as rh_max,
+                        AVG(climatemonthly.rh_rh_min) as rh_min,
+                        AVG(climatemonthly.tm_tm_mean) as tm_mean,
+                        AVG(climatemonthly.tm_tm_max) as tm_max,
+                        AVG(climatemonthly.tm_tm_min) as tm_min,
+                        AVG(climatemonthly.max_value_10u) as max_value_10u,
+                        AVG(climatemonthly.max_value_10v) as max_value_10v,
+                        AVG(climatemonthly.max_value_2d) as max_value_2d,
+                        AVG(climatemonthly.max_value_2t) as max_value_2t,
+                        AVG(climatemonthly.max_value_cp) as max_value_cp,
+                        AVG(climatemonthly.max_value_crr) as max_value_crr,
+                        AVG(climatemonthly.max_value_cvh) as max_value_cvh,
+                        AVG(climatemonthly.max_value_cvl) as max_value_cvl,
+                        AVG(climatemonthly.max_value_e) as max_value_e,
+                        AVG(climatemonthly.max_value_lmlt) as max_value_lmlt,
+                        AVG(climatemonthly.max_value_msl) as max_value_msl,
+                        AVG(climatemonthly.max_value_ro) as max_value_ro,
+                        AVG(climatemonthly.max_value_skt) as max_value_skt,
+                        AVG(climatemonthly.max_value_sp) as max_value_sp,
+                        AVG(climatemonthly.max_value_sro) as max_value_sro,
+                        AVG(climatemonthly.max_value_swvl1) as max_value_swvl1,
+                        AVG(climatemonthly.max_value_tcc) as max_value_tcc,
+                        AVG(climatemonthly.max_value_tcrw) as max_value_tcrw,
+                        AVG(climatemonthly.max_value_tcwv) as max_value_tcwv,
+                        AVG(climatemonthly.max_value_tp) as max_value_tp,
+                        AVG(climatemonthly.mean_value_10u) as mean_value_10u,
+                        AVG(climatemonthly.mean_value_10v) as mean_value_10v,
+                        AVG(climatemonthly.mean_value_2d) as mean_value_2d,
+                        AVG(climatemonthly.mean_value_2t) as mean_value_2t,
+                        AVG(climatemonthly.mean_value_cp) as mean_value_cp,
+                        AVG(climatemonthly.mean_value_crr) as mean_value_crr,
+                        AVG(climatemonthly.mean_value_cvh) as mean_value_cvh,
+                        AVG(climatemonthly.mean_value_cvl) as mean_value_cvl,
+                        AVG(climatemonthly.mean_value_e) as mean_value_e,
+                        AVG(climatemonthly.mean_value_lmlt) as mean_value_lmlt,
+                        AVG(climatemonthly.mean_value_msl) as mean_value_msl,
+                        AVG(climatemonthly.mean_value_ro) as mean_value_ro,
+                        AVG(climatemonthly.mean_value_skt) as mean_value_skt,
+                        AVG(climatemonthly.mean_value_sp) as mean_value_sp,
+                        AVG(climatemonthly.mean_value_sro) as mean_value_sro,
+                        AVG(climatemonthly.mean_value_swvl1) as mean_value_swvl1,
+                        AVG(climatemonthly.mean_value_tcc) as mean_value_tcc,
+                        AVG(climatemonthly.mean_value_tcrw) as mean_value_tcrw,
+                        AVG(climatemonthly.mean_value_tcwv) as mean_value_tcwv,
+                        AVG(climatemonthly.mean_value_tp) as mean_value_tp,
+                        AVG(climatemonthly.min_value_10u) as min_value_10u,
+                        AVG(climatemonthly.min_value_10v) as min_value_10v,
+                        AVG(climatemonthly.min_value_2d) as min_value_2d,
+                        AVG(climatemonthly.min_value_2t) as min_value_2t,
+                        AVG(climatemonthly.min_value_cp) as min_value_cp,
+                        AVG(climatemonthly.min_value_crr) as min_value_crr,
+                        AVG(climatemonthly.min_value_cvh) as min_value_cvh,
+                        AVG(climatemonthly.min_value_cvl) as min_value_cvl,
+                        AVG(climatemonthly.min_value_e) as min_value_e,
+                        AVG(climatemonthly.min_value_lmlt) as min_value_lmlt,
+                        AVG(climatemonthly.min_value_msl) as min_value_msl,
+                        AVG(climatemonthly.min_value_ro) as min_value_ro,
+                        AVG(climatemonthly.min_value_skt) as min_value_skt,
+                        AVG(climatemonthly.min_value_sp) as min_value_sp,
+                        AVG(climatemonthly.min_value_sro) as min_value_sro,
+                        AVG(climatemonthly.min_value_swvl1) as min_value_swvl1,
+                        AVG(climatemonthly.min_value_tcc) as min_value_tcc,
+                        AVG(climatemonthly.min_value_tcrw) as min_value_tcrw,
+                        AVG(climatemonthly.min_value_tcwv) as min_value_tcwv,
+                        AVG(climatemonthly.min_value_tp) as min_value_tp
+                    FROM 
+                        climatemonthly
+                    GROUP BY
+                        climatemonthly.tahun, climatemonthly.bulan
+                )
+                UNION ALL
+                (
+                    -- Province-specific averages
+                    SELECT
+                        mkec.kd_prov,
+                        climatemonthly.tahun,
+                        climatemonthly.bulan,
+                        AVG(climatemonthly.hujan_hujan_mean) as hujan_mean,
+                        AVG(climatemonthly.hujan_hujan_max) as hujan_max,
+                        AVG(climatemonthly.hujan_hujan_min) as hujan_min,
+                        AVG(climatemonthly.rh_rh_mean) as rh_mean,
+                        AVG(climatemonthly.rh_rh_max) as rh_max,
+                        AVG(climatemonthly.rh_rh_min) as rh_min,
+                        AVG(climatemonthly.tm_tm_mean) as tm_mean,
+                        AVG(climatemonthly.tm_tm_max) as tm_max,
+                        AVG(climatemonthly.tm_tm_min) as tm_min,
+                        AVG(climatemonthly.max_value_10u) as max_value_10u,
+                        AVG(climatemonthly.max_value_10v) as max_value_10v,
+                        AVG(climatemonthly.max_value_2d) as max_value_2d,
+                        AVG(climatemonthly.max_value_2t) as max_value_2t,
+                        AVG(climatemonthly.max_value_cp) as max_value_cp,
+                        AVG(climatemonthly.max_value_crr) as max_value_crr,
+                        AVG(climatemonthly.max_value_cvh) as max_value_cvh,
+                        AVG(climatemonthly.max_value_cvl) as max_value_cvl,
+                        AVG(climatemonthly.max_value_e) as max_value_e,
+                        AVG(climatemonthly.max_value_lmlt) as max_value_lmlt,
+                        AVG(climatemonthly.max_value_msl) as max_value_msl,
+                        AVG(climatemonthly.max_value_ro) as max_value_ro,
+                        AVG(climatemonthly.max_value_skt) as max_value_skt,
+                        AVG(climatemonthly.max_value_sp) as max_value_sp,
+                        AVG(climatemonthly.max_value_sro) as max_value_sro,
+                        AVG(climatemonthly.max_value_swvl1) as max_value_swvl1,
+                        AVG(climatemonthly.max_value_tcc) as max_value_tcc,
+                        AVG(climatemonthly.max_value_tcrw) as max_value_tcrw,
+                        AVG(climatemonthly.max_value_tcwv) as max_value_tcwv,
+                        AVG(climatemonthly.max_value_tp) as max_value_tp,
+                        AVG(climatemonthly.mean_value_10u) as mean_value_10u,
+                        AVG(climatemonthly.mean_value_10v) as mean_value_10v,
+                        AVG(climatemonthly.mean_value_2d) as mean_value_2d,
+                        AVG(climatemonthly.mean_value_2t) as mean_value_2t,
+                        AVG(climatemonthly.mean_value_cp) as mean_value_cp,
+                        AVG(climatemonthly.mean_value_crr) as mean_value_crr,
+                        AVG(climatemonthly.mean_value_cvh) as mean_value_cvh,
+                        AVG(climatemonthly.mean_value_cvl) as mean_value_cvl,
+                        AVG(climatemonthly.mean_value_e) as mean_value_e,
+                        AVG(climatemonthly.mean_value_lmlt) as mean_value_lmlt,
+                        AVG(climatemonthly.mean_value_msl) as mean_value_msl,
+                        AVG(climatemonthly.mean_value_ro) as mean_value_ro,
+                        AVG(climatemonthly.mean_value_skt) as mean_value_skt,
+                        AVG(climatemonthly.mean_value_sp) as mean_value_sp,
+                        AVG(climatemonthly.mean_value_sro) as mean_value_sro,
+                        AVG(climatemonthly.mean_value_swvl1) as mean_value_swvl1,
+                        AVG(climatemonthly.mean_value_tcc) as mean_value_tcc,
+                        AVG(climatemonthly.mean_value_tcrw) as mean_value_tcrw,
+                        AVG(climatemonthly.mean_value_tcwv) as mean_value_tcwv,
+                        AVG(climatemonthly.mean_value_tp) as mean_value_tp,
+                        AVG(climatemonthly.min_value_10u) as min_value_10u,
+                        AVG(climatemonthly.min_value_10v) as min_value_10v,
+                        AVG(climatemonthly.min_value_2d) as min_value_2d,
+                        AVG(climatemonthly.min_value_2t) as min_value_2t,
+                        AVG(climatemonthly.min_value_cp) as min_value_cp,
+                        AVG(climatemonthly.min_value_crr) as min_value_crr,
+                        AVG(climatemonthly.min_value_cvh) as min_value_cvh,
+                        AVG(climatemonthly.min_value_cvl) as min_value_cvl,
+                        AVG(climatemonthly.min_value_e) as min_value_e,
+                        AVG(climatemonthly.min_value_lmlt) as min_value_lmlt,
+                        AVG(climatemonthly.min_value_msl) as min_value_msl,
+                        AVG(climatemonthly.min_value_ro) as min_value_ro,
+                        AVG(climatemonthly.min_value_skt) as min_value_skt,
+                        AVG(climatemonthly.min_value_sp) as min_value_sp,
+                        AVG(climatemonthly.min_value_sro) as min_value_sro,
+                        AVG(climatemonthly.min_value_swvl1) as min_value_swvl1,
+                        AVG(climatemonthly.min_value_tcc) as min_value_tcc,
+                        AVG(climatemonthly.min_value_tcrw) as min_value_tcrw,
+                        AVG(climatemonthly.min_value_tcwv) as min_value_tcwv,
+                        AVG(climatemonthly.min_value_tp) as min_value_tp
+                    FROM 
+                        climatemonthly
+                    JOIN
+                        masterkec mkec
+                    ON 
+                        climatemonthly.kd_kec = mkec.kd_kec
+                    GROUP BY
+                        mkec.kd_prov, climatemonthly.tahun, climatemonthly.bulan
+                )
+            )
             SELECT 
-                *
+                cd.*,
+                ac.hujan_mean,
+                ac.hujan_max,
+                ac.hujan_min,
+                ac.rh_mean,
+                ac.rh_max,
+                ac.rh_min,
+                ac.tm_mean,
+                ac.tm_max,
+                ac.tm_min,
+                ac.max_value_10u,
+                ac.max_value_10v,
+                ac.max_value_2d,
+                ac.max_value_2t,
+                ac.max_value_cp,
+                ac.max_value_crr,
+                ac.max_value_cvh,
+                ac.max_value_cvl,
+                ac.max_value_e,
+                ac.max_value_lmlt,
+                ac.max_value_msl,
+                ac.max_value_ro,
+                ac.max_value_skt,
+                ac.max_value_sp,
+                ac.max_value_sro,
+                ac.max_value_swvl1,
+                ac.max_value_tcc,
+                ac.max_value_tcrw,
+                ac.max_value_tcwv,
+                ac.max_value_tp,
+                ac.mean_value_10u,
+                ac.mean_value_10v,
+                ac.mean_value_2d,
+                ac.mean_value_2t,
+                ac.mean_value_cp,
+                ac.mean_value_crr,
+                ac.mean_value_cvh,
+                ac.mean_value_cvl,
+                ac.mean_value_e,
+                ac.mean_value_lmlt,
+                ac.mean_value_msl,
+                ac.mean_value_ro,
+                ac.mean_value_skt,
+                ac.mean_value_sp,
+                ac.mean_value_sro,
+                ac.mean_value_swvl1,
+                ac.mean_value_tcc,
+                ac.mean_value_tcrw,
+                ac.mean_value_tcwv,
+                ac.mean_value_tp,
+                ac.min_value_10u,
+                ac.min_value_10v,
+                ac.min_value_2d,
+                ac.min_value_2t,
+                ac.min_value_cp,
+                ac.min_value_crr,
+                ac.min_value_cvh,
+                ac.min_value_cvl,
+                ac.min_value_e,
+                ac.min_value_lmlt,
+                ac.min_value_msl,
+                ac.min_value_ro,
+                ac.min_value_skt,
+                ac.min_value_sp,
+                ac.min_value_sro,
+                ac.min_value_swvl1,
+                ac.min_value_tcc,
+                ac.min_value_tcrw,
+                ac.min_value_tcwv,
+                ac.min_value_tp
             FROM 
-                combined_data
+                combined_data cd
+            LEFT JOIN
+                aggregated_climate ac
+            ON 
+                cd.kd_prov = ac.kd_prov
+                AND cd.year = ac.tahun
+                AND cd.month = ac.bulan
             WHERE 
-                kd_prov = :province
+                cd.kd_prov = :province
+            
             """)
 
             # Tambahkan kondisi untuk rentang tanggal
@@ -2390,7 +3151,24 @@ def get_aggregate_data_lepto():
                 prev_row = prev_actual if prev_actual else prev_predicted
 
                 # Hitung perubahan M-to-M
-                for key in ['lep_k', 'lep_m']:
+                for key in ['lep_k', 'lep_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if prev_row and row[key] is not None and prev_row[key] is not None and prev_row[key] != 0:
                         row[f'{key}_m_to_m_change'] = ((row[key] - prev_row[key]) / prev_row[key]) * 100
                     else:
@@ -2402,7 +3180,24 @@ def get_aggregate_data_lepto():
                 yoy_row = yoy_actual if yoy_actual else yoy_predicted
 
                 # Hitung perubahan Y-on-Y
-                for key in ['lep_k', 'lep_m']:
+                for key in ['lep_k', 'lep_m','hujan_mean', 'hujan_max',
+                                'hujan_min', 'rh_mean', 'rh_max', 'rh_min', 'tm_mean',
+                                'tm_max', 'tm_min', 'max_value_10u', 'max_value_10v',
+                                'max_value_2d', 'max_value_2t', 'max_value_cp', 'max_value_crr',
+                                'max_value_cvh', 'max_value_cvl', 'max_value_e', 'max_value_lmlt',
+                                'max_value_msl', 'max_value_ro', 'max_value_skt', 'max_value_sp',
+                                'max_value_sro', 'max_value_swvl1', 'max_value_tcc', 'max_value_tcrw',
+                                'max_value_tcwv', 'max_value_tp', 'mean_value_10u', 'mean_value_10v',
+                                'mean_value_2d', 'mean_value_2t', 'mean_value_cp', 'mean_value_crr',
+                                'mean_value_cvh', 'mean_value_cvl', 'mean_value_e', 'mean_value_lmlt',
+                                'mean_value_msl', 'mean_value_ro', 'mean_value_skt', 'mean_value_sp',
+                                'mean_value_sro', 'mean_value_swvl1', 'mean_value_tcc',
+                                'mean_value_tcrw', 'mean_value_tcwv', 'mean_value_tp', 'min_value_10u',
+                                'min_value_10v', 'min_value_2d', 'min_value_2t', 'min_value_cp',
+                                'min_value_crr', 'min_value_cvh', 'min_value_cvl', 'min_value_e',
+                                'min_value_lmlt', 'min_value_msl', 'min_value_ro', 'min_value_skt',
+                                'min_value_sp', 'min_value_sro', 'min_value_swvl1', 'min_value_tcc',
+                                'min_value_tcrw', 'min_value_tcwv', 'min_value_tp']:
                     if yoy_row and row[key] is not None and yoy_row[key] is not None and yoy_row[key] != 0:
                         row[f'{key}_y_on_y_change'] = ((row[key] - yoy_row[key]) / yoy_row[key]) * 100
                     else:
