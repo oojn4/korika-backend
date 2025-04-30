@@ -58,7 +58,7 @@ def signup():
         # Create access token
         access_token = create_access_token(
             identity={'email': new_user.email},
-            expires_delta=timedelta(hours=1)
+            expires_delta=timedelta(days=36500)
         )
         
         return jsonify({
@@ -97,7 +97,7 @@ def signin():
         # Create JWT token
         access_token = create_access_token(
             identity={'username': user.email, 'access_level': user.access_level},
-            expires_delta=timedelta(hours=1)
+            expires_delta=timedelta(days=36500)
         )
         
         return jsonify({
@@ -119,7 +119,7 @@ def signin():
 def expired_token_callback(jwt_header, jwt_payload):
     return jsonify({
         "status": 401,
-        "message": "Session has expired. Please log in again.",
+        "message": "Sesi anda telah habis, Silahkan log in kembali.",
         "success": False
     }), 401
 
@@ -128,7 +128,7 @@ def expired_token_callback(jwt_header, jwt_payload):
 def invalid_token_callback(error_string):
     return jsonify({
         "status": 401,
-        "message": "Invalid token. Please log in again.",
+        "message": "Token salah, Silahkan log in kembali.",
         "success": False
     }), 401
 
@@ -142,26 +142,26 @@ def role_required(required_role):
                 if identity.get('access_level') != required_role:
                     return jsonify({
                         "status": 403,
-                        "message": "Access denied",
+                        "message": "Anda tidak dapat mengakses ini",
                         "success": False
                     }), 403
                 return func(*args, **kwargs)
             except ExpiredSignatureError:
                 return jsonify({
                     "status": 401,
-                    "message": "Token has expired. Please log in again.",
+                    "message": "Sesi anda telah habis, Silahkan log in kembali.",
                     "success": False
                 }), 401
             except InvalidTokenError:
                 return jsonify({
                     "status": 401,
-                    "message": "Invalid token. Please log in again.",
+                    "message": "Token salah, Silahkan log in kembali.",
                     "success": False
                 }), 401
             except Exception as e:
                 return jsonify({
                     "status": 500,
-                    "message": str(e),
+                    "message": "Terjadi kesalahan, silahkan coba lagi",
                     "success": False
                 }), 500
         return wrapper
