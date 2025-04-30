@@ -58,7 +58,7 @@ def signup():
         # Create access token
         access_token = create_access_token(
             identity={'email': new_user.email},
-            expires_delta=timedelta(days=36500)
+            expires_delta=timedelta(days=1)
         )
         
         return jsonify({
@@ -95,10 +95,16 @@ def signin():
             }), 401
         
         # Create JWT token
-        access_token = create_access_token(
-            identity={'username': user.email, 'access_level': user.access_level},
-            expires_delta=timedelta(days=36500)
-        )
+        if user.email == 'digitaltwin@gmail.com':
+            access_token = create_access_token(
+                identity={'username': user.email, 'access_level': user.access_level},
+                expires_delta=timedelta(days=36500)
+            )
+        else:
+            access_token = create_access_token(
+                identity={'username': user.email, 'access_level': user.access_level},
+                expires_delta=timedelta(days=1)
+            )
         
         return jsonify({
             "message": "Login berhasil",
