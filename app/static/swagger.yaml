@@ -4,9 +4,9 @@ info:
   description: API for the ClimateSmart Indonesia (CSI) Korika application
   version: 1.0.0
 servers:
-  - url: http://202.43.168.207:5000
+  - url: https://csi.korika.id:5000
     description: Production Server
-  - url: http://localhost:5000
+  - url: http://202.43.168.207:5000
     description: Development Server
 
 components:
