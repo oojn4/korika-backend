@@ -10,7 +10,7 @@ import os
 import tempfile
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import requests
-
+import re
 
 bp = Blueprint('data', __name__, url_prefix='')
 
@@ -3441,5 +3441,1253 @@ def get_aggregate_data_lepto():
 
     except Exception as e:
         return jsonify({"error": "Terjadi kesalahan, silahkan coba lagi"}), 500
+    finally:
+        db.session.close()
+
+@bp.route('/get-dbd-data', methods=['GET'])
+@jwt_required()
+def get_dbd_data():
+    try:
+        # Ambil parameter dari request
+        province = request.args.get('province', default=None, type=str)
+        city = request.args.get('city', default=None, type=str)
+        month_year = request.args.get('month_year', default=None, type=str)
+        
+        # Validasi parameter
+        if not province:
+            return jsonify({"error": "Parameter province wajib diisi"}), 400
+        
+        if not month_year or not re.match(r'^\d{4}-\d{2}$', month_year):
+            return jsonify({"error": "Parameter month_year harus dalam format YYYY-MM"}), 400
+        
+        # Parse month_year
+        year, month = map(int, month_year.split('-'))
+        
+        # Buat SQL query berdasarkan apakah city diisi atau tidak
+        if city:
+            # Query untuk kota/kabupaten tertentu
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req, 
+                    :city as kd_kab_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hfi.kd_prov, hfi.kd_kab,
+                    hfi.provinsi AS province,
+                    hfi.kabkot AS city,
+                    dk.tahun AS year,
+                    dk.bulan AS month,
+                    dk.status AS status,
+                    SUM(dk."DBD_P") AS dbd_p,
+                    SUM(dk."DBD_M") AS dbd_m
+                FROM 
+                    dbd dk
+                JOIN 
+                    (
+                    select mk.*,mp.provinsi
+                    from masterkab mk
+                    left join masterprov mp 
+                    on mk.kd_prov = mp.kd_prov) hfi
+                ON 
+                    dk.kd_kab = hfi.kd_kab
+                GROUP BY 
+                    hfi.kd_prov, hfi.kd_kab, hfi.provinsi, hfi.kabkot, dk.tahun, dk.bulan, dk.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.kd_kab = rt.kd_kab_req
+                   AND cd.year = rt.year_req
+                   AND cd.month = rt.month_req
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.kd_kab = rt.kd_kab_req
+                   AND cd.month = rt.month_req
+                   AND cd.year = rt.year_req - 1
+            ),
+            current_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    cd.kd_kab,
+                    cd.province,
+                    cd.city,
+                    cd.year,
+                    cd.month,
+                    cd.status,
+                    cd.dbd_p,
+                    cd.dbd_m,
+                    'Data Aktual/Prediksi' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.kd_kab = rt.kd_kab_req
+                    AND cd.year = rt.year_req
+                    AND cd.month = rt.month_req
+            ),
+            previous_year_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    cd.kd_kab,
+                    cd.province,
+                    cd.city,
+                    rt.year_req as year,
+                    cd.month,
+                    cd.status,
+                    cd.dbd_p,
+                    cd.dbd_m,
+                    'Data Tahun Sebelumnya' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.kd_kab = rt.kd_kab_req
+                    AND cd.month = rt.month_req
+                    AND cd.year = rt.year_req - 1
+            ),
+            default_data AS (
+                SELECT
+                    rt.kd_prov_req as kd_prov,
+                    rt.kd_kab_req as kd_kab,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = rt.kd_prov_req) as province,
+                    (SELECT mk.kabkot FROM masterkab mk WHERE mk.kd_kab = rt.kd_kab_req) as city,
+                    rt.year_req as year,
+                    rt.month_req as month,
+                    'no data' as status,
+                    0 as dbd_p,
+                    0 as dbd_m,
+                    'Data Default (Semua 0)' as data_status
+                FROM
+                    requested_time rt
+            )
+            SELECT * FROM (
+                SELECT * FROM current_data
+                WHERE (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        else:
+            # Query untuk agregasi provinsi (semua kabupaten)
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hfi.kd_prov,
+                    hfi.provinsi AS province,
+                    'Semua Kabupaten/Kota' AS city,
+                    dk.tahun AS year,
+                    dk.bulan AS month,
+                    dk.status AS status,
+                    SUM(dk."DBD_P") AS dbd_p,
+                    SUM(dk."DBD_M") AS dbd_m
+                FROM 
+                    dbd dk
+                JOIN 
+                    (
+                    select mk.*,mp.provinsi
+                    from masterkab mk
+                    left join masterprov mp 
+                    on mk.kd_prov = mp.kd_prov) hfi
+                ON 
+                    dk.kd_kab = hfi.kd_kab
+                WHERE
+                    hfi.kd_prov = :province
+                GROUP BY 
+                    hfi.kd_prov, hfi.provinsi, dk.tahun, dk.bulan, dk.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.year = rt.year_req
+                   AND cd.month = rt.month_req
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.month = rt.month_req
+                   AND cd.year = rt.year_req - 1
+            ),
+            current_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    NULL as kd_kab,
+                    cd.province,
+                    cd.city,
+                    cd.year,
+                    cd.month,
+                    cd.status,
+                    cd.dbd_p,
+                    cd.dbd_m,
+                    'Data Aktual/Prediksi' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.year = rt.year_req
+                    AND cd.month = rt.month_req
+            ),
+            previous_year_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    NULL as kd_kab,
+                    cd.province,
+                    cd.city,
+                    rt.year_req as year,
+                    cd.month,
+                    cd.status,
+                    cd.dbd_p,
+                    cd.dbd_m,
+                    'Data Tahun Sebelumnya' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.month = rt.month_req
+                    AND cd.year = rt.year_req - 1
+            ),
+            default_data AS (
+                SELECT
+                    rt.kd_prov_req as kd_prov,
+                    NULL as kd_kab,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = rt.kd_prov_req) as province,
+                    'Semua Kabupaten/Kota' as city,
+                    rt.year_req as year,
+                    rt.month_req as month,
+                    'no data' as status,
+                    0 as dbd_p,
+                    0 as dbd_m,
+                    'Data Default (Semua 0)' as data_status
+                FROM
+                    requested_time rt
+            )
+            SELECT * FROM (
+                SELECT * FROM current_data
+                WHERE (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        
+        # Eksekusi query dengan parameter
+        params = {
+            'province': province,
+            'city': city,
+            'year': year,
+            'month': month
+        }
+        
+        # Jalankan query dan dapatkan hasil sebagai dict
+        result = db.session.execute(text(query), params).fetchone()
+        
+        if result:
+            # Konversi hasil query menjadi dictionary
+            # Pendekatan 1: Menggunakan _asdict() jika tersedia
+            try:
+                data = result._asdict()
+            except AttributeError:
+                # Pendekatan 2: Menggunakan dict(zip()) dengan kolom
+                column_names = result._fields if hasattr(result, '_fields') else result.keys()
+                data = dict(zip(column_names, result))
+            
+            # Tambahkan metadata dari parameter asli
+            data['request_parameters'] = {
+                'province': province,
+                'city': city,
+                'month_year': month_year
+            }
+            
+            return jsonify(data)
+        else:
+            return jsonify({"error": "Data tidak ditemukan"}), 404
+            
+    except Exception as e:
+        # Log error untuk debugging
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": f"Terjadi kesalahan: {str(e)}"}), 500
+    finally:
+        db.session.close()
+
+@bp.route('/get-lepto-data', methods=['GET'])
+@jwt_required()
+def get_lepto_data():
+    try:
+        # Ambil parameter dari request
+        province = request.args.get('province', default=None, type=str)
+        city = request.args.get('city', default=None, type=str)
+        month_year = request.args.get('month_year', default=None, type=str)
+        
+        # Validasi parameter
+        if not province:
+            return jsonify({"error": "Parameter province wajib diisi"}), 400
+        
+        if not month_year or not re.match(r'^\d{4}-\d{2}$', month_year):
+            return jsonify({"error": "Parameter month_year harus dalam format YYYY-MM"}), 400
+        
+        # Parse month_year
+        year, month = map(int, month_year.split('-'))
+        
+        # Buat SQL query berdasarkan apakah city diisi atau tidak
+        if city:
+            # Query untuk kota/kabupaten tertentu
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req, 
+                    :city as kd_kab_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hfi.kd_prov, hfi.kd_kab,
+                    hfi.provinsi AS province,
+                    hfi.kabkot AS city,
+                    lk.tahun AS year,
+                    lk.bulan AS month,
+                    lk.status AS status,
+                    SUM(lk."LEP_K") AS lep_k,
+                    SUM(lk."LEP_M") AS lep_m
+                FROM 
+                    lepto lk
+                JOIN 
+                    (
+                    select mk.*,mp.provinsi
+                    from masterkab mk
+                    left join masterprov mp 
+                    on mk.kd_prov = mp.kd_prov) hfi
+                ON 
+                    lk.kd_kab = hfi.kd_kab
+                GROUP BY 
+                    hfi.kd_prov, hfi.kd_kab, hfi.provinsi, hfi.kabkot, lk.tahun, lk.bulan, lk.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.kd_kab = rt.kd_kab_req
+                   AND cd.year = rt.year_req
+                   AND cd.month = rt.month_req
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.kd_kab = rt.kd_kab_req
+                   AND cd.month = rt.month_req
+                   AND cd.year = rt.year_req - 1
+            ),
+            current_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    cd.kd_kab,
+                    cd.province,
+                    cd.city,
+                    cd.year,
+                    cd.month,
+                    cd.status,
+                    cd.lep_k,
+                    cd.lep_m,
+                    'Data Aktual/Prediksi' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.kd_kab = rt.kd_kab_req
+                    AND cd.year = rt.year_req
+                    AND cd.month = rt.month_req
+            ),
+            previous_year_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    cd.kd_kab,
+                    cd.province,
+                    cd.city,
+                    rt.year_req as year,
+                    cd.month,
+                    cd.status,
+                    cd.lep_k,
+                    cd.lep_m,
+                    'Data Tahun Sebelumnya' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.kd_kab = rt.kd_kab_req
+                    AND cd.month = rt.month_req
+                    AND cd.year = rt.year_req - 1
+            ),
+            default_data AS (
+                SELECT
+                    rt.kd_prov_req as kd_prov,
+                    rt.kd_kab_req as kd_kab,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = rt.kd_prov_req) as province,
+                    (SELECT mk.kabkot FROM masterkab mk WHERE mk.kd_kab = rt.kd_kab_req) as city,
+                    rt.year_req as year,
+                    rt.month_req as month,
+                    'no data' as status,
+                    0 as lep_k,
+                    0 as lep_m,
+                    'Data Default (Semua 0)' as data_status
+                FROM
+                    requested_time rt
+            )
+            SELECT * FROM (
+                SELECT * FROM current_data
+                WHERE (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        else:
+            # Query untuk agregasi provinsi (semua kabupaten)
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hfi.kd_prov,
+                    hfi.provinsi AS province,
+                    'Semua Kabupaten/Kota' AS city,
+                    lk.tahun AS year,
+                    lk.bulan AS month,
+                    lk.status AS status,
+                    SUM(lk."LEP_K") AS lep_k,
+                    SUM(lk."LEP_M") AS lep_m
+                FROM 
+                    lepto lk
+                JOIN 
+                    (
+                    select mk.*,mp.provinsi
+                    from masterkab mk
+                    left join masterprov mp 
+                    on mk.kd_prov = mp.kd_prov) hfi
+                ON 
+                    lk.kd_kab = hfi.kd_kab
+                WHERE
+                    hfi.kd_prov = :province
+                GROUP BY 
+                    hfi.kd_prov, hfi.provinsi, lk.tahun, lk.bulan, lk.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.year = rt.year_req
+                   AND cd.month = rt.month_req
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data cd
+                JOIN requested_time rt
+                ON cd.kd_prov = rt.kd_prov_req
+                   AND cd.month = rt.month_req
+                   AND cd.year = rt.year_req - 1
+            ),
+            current_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    NULL as kd_kab,
+                    cd.province,
+                    cd.city,
+                    cd.year,
+                    cd.month,
+                    cd.status,
+                    cd.lep_k,
+                    cd.lep_m,
+                    'Data Aktual/Prediksi' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.year = rt.year_req
+                    AND cd.month = rt.month_req
+            ),
+            previous_year_data AS (
+                SELECT 
+                    cd.kd_prov,
+                    NULL as kd_kab,
+                    cd.province,
+                    cd.city,
+                    rt.year_req as year,
+                    cd.month,
+                    cd.status,
+                    cd.lep_k,
+                    cd.lep_m,
+                    'Data Tahun Sebelumnya' as data_status
+                FROM 
+                    combined_data cd
+                JOIN
+                    requested_time rt
+                ON
+                    cd.kd_prov = rt.kd_prov_req
+                    AND cd.month = rt.month_req
+                    AND cd.year = rt.year_req - 1
+            ),
+            default_data AS (
+                SELECT
+                    rt.kd_prov_req as kd_prov,
+                    NULL as kd_kab,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = rt.kd_prov_req) as province,
+                    'Semua Kabupaten/Kota' as city,
+                    rt.year_req as year,
+                    rt.month_req as month,
+                    'no data' as status,
+                    0 as lep_k,
+                    0 as lep_m,
+                    'Data Default (Semua 0)' as data_status
+                FROM
+                    requested_time rt
+            )
+            SELECT * FROM (
+                SELECT * FROM current_data
+                WHERE (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT * FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        
+        # Eksekusi query dengan parameter
+        params = {
+            'province': province,
+            'city': city,
+            'year': year,
+            'month': month
+        }
+        
+        # Jalankan query dan dapatkan hasil sebagai dict
+        result = db.session.execute(text(query), params).fetchone()
+        
+        if result:
+            # Konversi hasil query menjadi dictionary
+            # Pendekatan 1: Menggunakan _asdict() jika tersedia
+            try:
+                data = result._asdict()
+            except AttributeError:
+                # Pendekatan 2: Menggunakan dict(zip()) dengan kolom
+                column_names = result._fields if hasattr(result, '_fields') else result.keys()
+                data = dict(zip(column_names, result))
+            
+            # Tambahkan metadata dari parameter asli
+            data['request_parameters'] = {
+                'province': province,
+                'city': city,
+                'month_year': month_year
+            }
+            
+            return jsonify(data)
+        else:
+            return jsonify({"error": "Data tidak ditemukan"}), 404
+            
+    except Exception as e:
+        # Log error untuk debugging
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": f"Terjadi kesalahan: {str(e)}"}), 500
+    finally:
+        db.session.close()
+        
+@bp.route('/get-malaria-data', methods=['GET'])
+@jwt_required()
+def get_malaria_data():
+    try:
+        # Ambil parameter dari request
+        province = request.args.get('province', default=None, type=str)
+        city = request.args.get('city', default=None, type=str)
+        district = request.args.get('district', default=None, type=str)
+        month_year = request.args.get('month_year', default=None, type=str)
+        
+        # Validasi parameter
+        if not province:
+            return jsonify({"error": "Parameter province wajib diisi"}), 400
+        
+        if not month_year or not re.match(r'^\d{4}-\d{2}$', month_year):
+            return jsonify({"error": "Parameter month_year harus dalam format YYYY-MM"}), 400
+        
+        # Parse month_year
+        year, month = map(int, month_year.split('-'))
+        
+        # Buat SQL query berdasarkan level detail yang diminta
+        if district and city:
+            # Query untuk kecamatan tertentu
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req, 
+                    :city as kd_kab_req,
+                    :district as kd_kec_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hf.kd_prov, hf.kd_kab, hf.kd_kec,
+                    mp.provinsi AS province,
+                    mk.kabkot AS city,
+                    mkec.kecamatan AS district,
+                    mhfm.tahun AS year,
+                    mhfm.bulan AS month,
+                    mhfm.status AS status,
+                    SUM(COALESCE(mhfm.tot_pos, 0)) AS tot_pos,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_mikroskop, 0)) as konfirmasi_lab_mikroskop,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_rdt, 0)) as konfirmasi_lab_rdt,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_pcr, 0)) as konfirmasi_lab_pcr,
+                    SUM(COALESCE(mhfm.pos_0_4, 0)) as pos_0_4,
+                    SUM(COALESCE(mhfm.pos_5_14, 0)) as pos_5_14,
+                    SUM(COALESCE(mhfm.pos_15_64, 0)) as pos_15_64,
+                    SUM(COALESCE(mhfm.pos_diatas_64, 0)) as pos_diatas_64,
+                    SUM(COALESCE(mhfm.hamil_pos, 0)) as hamil_pos,
+                    SUM(COALESCE(mhfm.kematian_malaria, 0)) as kematian_malaria,
+                    SUM(COALESCE(mhfm.obat_standar, 0)) as obat_standar,
+                    SUM(COALESCE(mhfm.obat_nonprogram, 0)) as obat_nonprogram,
+                    SUM(COALESCE(mhfm.obat_primaquin, 0)) as obat_primaquin,
+                    SUM(COALESCE(mhfm.p_pf, 0)) as p_pf,
+                    SUM(COALESCE(mhfm.p_pv, 0)) as p_pv,
+                    SUM(COALESCE(mhfm.p_po, 0)) as p_po,
+                    SUM(COALESCE(mhfm.p_pm, 0)) as p_pm,
+                    SUM(COALESCE(mhfm.p_pk, 0)) as p_pk,
+                    SUM(COALESCE(mhfm.p_mix, 0)) as p_mix,
+                    SUM(COALESCE(mhfm.p_suspek_pk, 0)) as p_suspek_pk,
+                    SUM(COALESCE(mhfm.p_others, 0)) as p_others,
+                    SUM(COALESCE(mhfm.penularan_indigenus, 0)) as penularan_indigenus,
+                    SUM(COALESCE(mhfm.penularan_impor, 0)) as penularan_impor,
+                    SUM(COALESCE(mhfm.penularan_induced, 0)) as penularan_induced,
+                    SUM(COALESCE(mhfm.relaps, 0)) as relaps
+                FROM 
+                    healthfacility hf
+                LEFT JOIN 
+                    masterkec mkec ON hf.kd_kec = mkec.kd_kec
+                LEFT JOIN 
+                    masterkab mk ON hf.kd_kab = mk.kd_kab
+                LEFT JOIN 
+                    masterprov mp ON hf.kd_prov = mp.kd_prov
+                LEFT JOIN 
+                    (
+                    SELECT * FROM malariamonthly
+                    WHERE tahun = :year AND bulan = :month
+                    ) mhfm ON hf.id_faskes = mhfm.id_faskes
+                WHERE
+                    hf.kd_prov = :province
+                    AND hf.kd_kab = :city
+                    AND hf.kd_kec = :district
+                GROUP BY 
+                    hf.kd_prov, hf.kd_kab, hf.kd_kec, mp.provinsi, mk.kabkot, mkec.kecamatan, 
+                    mhfm.tahun, mhfm.bulan, mhfm.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data
+                WHERE year IS NOT NULL
+            ),
+            previous_year_data AS (
+                SELECT 
+                    hf.kd_prov, hf.kd_kab, hf.kd_kec,
+                    mp.provinsi AS province,
+                    mk.kabkot AS city,
+                    mkec.kecamatan AS district,
+                    :year as year,
+                    :month as month,
+                    mhfm.status AS status,
+                    SUM(COALESCE(mhfm.tot_pos, 0)) AS tot_pos,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_mikroskop, 0)) as konfirmasi_lab_mikroskop,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_rdt, 0)) as konfirmasi_lab_rdt,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_pcr, 0)) as konfirmasi_lab_pcr,
+                    SUM(COALESCE(mhfm.pos_0_4, 0)) as pos_0_4,
+                    SUM(COALESCE(mhfm.pos_5_14, 0)) as pos_5_14,
+                    SUM(COALESCE(mhfm.pos_15_64, 0)) as pos_15_64,
+                    SUM(COALESCE(mhfm.pos_diatas_64, 0)) as pos_diatas_64,
+                    SUM(COALESCE(mhfm.hamil_pos, 0)) as hamil_pos,
+                    SUM(COALESCE(mhfm.kematian_malaria, 0)) as kematian_malaria,
+                    SUM(COALESCE(mhfm.obat_standar, 0)) as obat_standar,
+                    SUM(COALESCE(mhfm.obat_nonprogram, 0)) as obat_nonprogram,
+                    SUM(COALESCE(mhfm.obat_primaquin, 0)) as obat_primaquin,
+                    SUM(COALESCE(mhfm.p_pf, 0)) as p_pf,
+                    SUM(COALESCE(mhfm.p_pv, 0)) as p_pv,
+                    SUM(COALESCE(mhfm.p_po, 0)) as p_po,
+                    SUM(COALESCE(mhfm.p_pm, 0)) as p_pm,
+                    SUM(COALESCE(mhfm.p_pk, 0)) as p_pk,
+                    SUM(COALESCE(mhfm.p_mix, 0)) as p_mix,
+                    SUM(COALESCE(mhfm.p_suspek_pk, 0)) as p_suspek_pk,
+                    SUM(COALESCE(mhfm.p_others, 0)) as p_others,
+                    SUM(COALESCE(mhfm.penularan_indigenus, 0)) as penularan_indigenus,
+                    SUM(COALESCE(mhfm.penularan_impor, 0)) as penularan_impor,
+                    SUM(COALESCE(mhfm.penularan_induced, 0)) as penularan_induced,
+                    SUM(COALESCE(mhfm.relaps, 0)) as relaps
+                FROM 
+                    healthfacility hf
+                LEFT JOIN 
+                    masterkec mkec ON hf.kd_kec = mkec.kd_kec
+                LEFT JOIN 
+                    masterkab mk ON hf.kd_kab = mk.kd_kab
+                LEFT JOIN 
+                    masterprov mp ON hf.kd_prov = mp.kd_prov
+                LEFT JOIN 
+                    (
+                    SELECT * FROM malariamonthly
+                    WHERE tahun = :year - 1 AND bulan = :month
+                    ) mhfm ON hf.id_faskes = mhfm.id_faskes
+                WHERE
+                    hf.kd_prov = :province
+                    AND hf.kd_kab = :city
+                    AND hf.kd_kec = :district
+                GROUP BY 
+                    hf.kd_prov, hf.kd_kab, hf.kd_kec, mp.provinsi, mk.kabkot, mkec.kecamatan, 
+                    mhfm.status
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM previous_year_data
+                WHERE status IS NOT NULL
+            ),
+            default_data AS (
+                SELECT
+                    :province as kd_prov,
+                    :city as kd_kab,
+                    :district as kd_kec,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = :province) as province,
+                    (SELECT mk.kabkot FROM masterkab mk WHERE mk.kd_kab = :city) as city,
+                    (SELECT mkec.kecamatan FROM masterkec mkec WHERE mkec.kd_kec = :district) as district,
+                    :year as year,
+                    :month as month,
+                    'no data' as status,
+                    0 as tot_pos,
+                    0 as konfirmasi_lab_mikroskop,
+                    0 as konfirmasi_lab_rdt,
+                    0 as konfirmasi_lab_pcr,
+                    0 as pos_0_4,
+                    0 as pos_5_14,
+                    0 as pos_15_64,
+                    0 as pos_diatas_64,
+                    0 as hamil_pos,
+                    0 as kematian_malaria,
+                    0 as obat_standar,
+                    0 as obat_nonprogram,
+                    0 as obat_primaquin,
+                    0 as p_pf,
+                    0 as p_pv,
+                    0 as p_po,
+                    0 as p_pm,
+                    0 as p_pk,
+                    0 as p_mix,
+                    0 as p_suspek_pk,
+                    0 as p_others,
+                    0 as penularan_indigenus,
+                    0 as penularan_impor,
+                    0 as penularan_induced,
+                    0 as relaps
+            )
+		    SELECT * FROM (
+                SELECT *, 'Data Aktual/Prediksi' as data_status FROM combined_data
+                WHERE year IS NOT NULL AND (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT *, 'Data Tahun Sebelumnya' as data_status FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT *, 'Data Default (Semua 0)' as data_status FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        elif city and not district:
+            # Query untuk kota/kabupaten tanpa kecamatan tertentu
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req, 
+                    :city as kd_kab_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hf.kd_prov, hf.kd_kab,
+                    mp.provinsi AS province,
+                    mk.kabkot AS city,
+                    NULL as kd_kec,
+                    'Semua Kecamatan' AS district,
+                    mhfm.tahun AS year,
+                    mhfm.bulan AS month,
+                    mhfm.status AS status,
+                    SUM(COALESCE(mhfm.tot_pos, 0)) AS tot_pos,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_mikroskop, 0)) as konfirmasi_lab_mikroskop,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_rdt, 0)) as konfirmasi_lab_rdt,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_pcr, 0)) as konfirmasi_lab_pcr,
+                    SUM(COALESCE(mhfm.pos_0_4, 0)) as pos_0_4,
+                    SUM(COALESCE(mhfm.pos_5_14, 0)) as pos_5_14,
+                    SUM(COALESCE(mhfm.pos_15_64, 0)) as pos_15_64,
+                    SUM(COALESCE(mhfm.pos_diatas_64, 0)) as pos_diatas_64,
+                    SUM(COALESCE(mhfm.hamil_pos, 0)) as hamil_pos,
+                    SUM(COALESCE(mhfm.kematian_malaria, 0)) as kematian_malaria,
+                    SUM(COALESCE(mhfm.obat_standar, 0)) as obat_standar,
+                    SUM(COALESCE(mhfm.obat_nonprogram, 0)) as obat_nonprogram,
+                    SUM(COALESCE(mhfm.obat_primaquin, 0)) as obat_primaquin,
+                    SUM(COALESCE(mhfm.p_pf, 0)) as p_pf,
+                    SUM(COALESCE(mhfm.p_pv, 0)) as p_pv,
+                    SUM(COALESCE(mhfm.p_po, 0)) as p_po,
+                    SUM(COALESCE(mhfm.p_pm, 0)) as p_pm,
+                    SUM(COALESCE(mhfm.p_pk, 0)) as p_pk,
+                    SUM(COALESCE(mhfm.p_mix, 0)) as p_mix,
+                    SUM(COALESCE(mhfm.p_suspek_pk, 0)) as p_suspek_pk,
+                    SUM(COALESCE(mhfm.p_others, 0)) as p_others,
+                    SUM(COALESCE(mhfm.penularan_indigenus, 0)) as penularan_indigenus,
+                    SUM(COALESCE(mhfm.penularan_impor, 0)) as penularan_impor,
+                    SUM(COALESCE(mhfm.penularan_induced, 0)) as penularan_induced,
+                    SUM(COALESCE(mhfm.relaps, 0)) as relaps
+                FROM 
+                    healthfacility hf
+                LEFT JOIN 
+                    masterkec mkec ON hf.kd_kec = mkec.kd_kec
+                LEFT JOIN 
+                    masterkab mk ON hf.kd_kab = mk.kd_kab
+                LEFT JOIN 
+                    masterprov mp ON hf.kd_prov = mp.kd_prov
+                LEFT JOIN 
+                    (
+                    SELECT * FROM malariamonthly
+                    WHERE tahun = :year AND bulan = :month
+                    ) mhfm ON hf.id_faskes = mhfm.id_faskes
+                WHERE
+                    hf.kd_prov = :province
+                    AND hf.kd_kab = :city
+                GROUP BY 
+                    hf.kd_prov, hf.kd_kab, mp.provinsi, mk.kabkot, 
+                    mhfm.tahun, mhfm.bulan, mhfm.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data
+                WHERE year IS NOT NULL
+            ),
+            previous_year_data AS (
+                SELECT 
+                    hf.kd_prov, hf.kd_kab,
+                    mp.provinsi AS province,
+                    mk.kabkot AS city,
+                    NULL as kd_kec,
+                    'Semua Kecamatan' AS district,
+                    :year as year,
+                    :month as month,
+                    mhfm.status AS status,
+                    SUM(COALESCE(mhfm.tot_pos, 0)) AS tot_pos,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_mikroskop, 0)) as konfirmasi_lab_mikroskop,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_rdt, 0)) as konfirmasi_lab_rdt,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_pcr, 0)) as konfirmasi_lab_pcr,
+                    SUM(COALESCE(mhfm.pos_0_4, 0)) as pos_0_4,
+                    SUM(COALESCE(mhfm.pos_5_14, 0)) as pos_5_14,
+                    SUM(COALESCE(mhfm.pos_15_64, 0)) as pos_15_64,
+                    SUM(COALESCE(mhfm.pos_diatas_64, 0)) as pos_diatas_64,
+                    SUM(COALESCE(mhfm.hamil_pos, 0)) as hamil_pos,
+                    SUM(COALESCE(mhfm.kematian_malaria, 0)) as kematian_malaria,
+                    SUM(COALESCE(mhfm.obat_standar, 0)) as obat_standar,
+                    SUM(COALESCE(mhfm.obat_nonprogram, 0)) as obat_nonprogram,
+                    SUM(COALESCE(mhfm.obat_primaquin, 0)) as obat_primaquin,
+                    SUM(COALESCE(mhfm.p_pf, 0)) as p_pf,
+                    SUM(COALESCE(mhfm.p_pv, 0)) as p_pv,
+                    SUM(COALESCE(mhfm.p_po, 0)) as p_po,
+                    SUM(COALESCE(mhfm.p_pm, 0)) as p_pm,
+                    SUM(COALESCE(mhfm.p_pk, 0)) as p_pk,
+                    SUM(COALESCE(mhfm.p_mix, 0)) as p_mix,
+                    SUM(COALESCE(mhfm.p_suspek_pk, 0)) as p_suspek_pk,
+                    SUM(COALESCE(mhfm.p_others, 0)) as p_others,
+                    SUM(COALESCE(mhfm.penularan_indigenus, 0)) as penularan_indigenus,
+                    SUM(COALESCE(mhfm.penularan_impor, 0)) as penularan_impor,
+                    SUM(COALESCE(mhfm.penularan_induced, 0)) as penularan_induced,
+                    SUM(COALESCE(mhfm.relaps, 0)) as relaps
+                FROM 
+                    healthfacility hf
+                LEFT JOIN 
+                    masterkec mkec ON hf.kd_kec = mkec.kd_kec
+                LEFT JOIN 
+                    masterkab mk ON hf.kd_kab = mk.kd_kab
+                LEFT JOIN 
+                    masterprov mp ON hf.kd_prov = mp.kd_prov
+                LEFT JOIN 
+                    (
+                    SELECT * FROM malariamonthly
+                    WHERE tahun = :year - 1 AND bulan = :month
+                    ) mhfm ON hf.id_faskes = mhfm.id_faskes
+                WHERE
+                    hf.kd_prov = :province
+                    AND hf.kd_kab = :city
+                GROUP BY 
+                    hf.kd_prov, hf.kd_kab, mp.provinsi, mk.kabkot, 
+                    mhfm.status
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM previous_year_data
+                WHERE status IS NOT NULL
+            ),
+            default_data AS (
+                SELECT
+                    :province as kd_prov,
+                    :city as kd_kab,
+                    NULL as kd_kec,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = :province) as province,
+                    (SELECT mk.kabkot FROM masterkab mk WHERE mk.kd_kab = :city) as city,
+                    'Semua Kecamatan' as district,
+                    :year as year,
+                    :month as month,
+                    'no data' as status,
+                    0 as tot_pos,
+                    0 as konfirmasi_lab_mikroskop,
+                    0 as konfirmasi_lab_rdt,
+                    0 as konfirmasi_lab_pcr,
+                    0 as pos_0_4,
+                    0 as pos_5_14,
+                    0 as pos_15_64,
+                    0 as pos_diatas_64,
+                    0 as hamil_pos,
+                    0 as kematian_malaria,
+                    0 as obat_standar,
+                    0 as obat_nonprogram,
+                    0 as obat_primaquin,
+                    0 as p_pf,
+                    0 as p_pv,
+                    0 as p_po,
+                    0 as p_pm,
+                    0 as p_pk,
+                    0 as p_mix,
+                    0 as p_suspek_pk,
+                    0 as p_others,
+                    0 as penularan_indigenus,
+                    0 as penularan_impor,
+                    0 as penularan_induced,
+                    0 as relaps
+            )
+
+		    SELECT * FROM (
+                SELECT *, 'Data Aktual/Prediksi' as data_status FROM combined_data
+                WHERE year IS NOT NULL AND (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT *, 'Data Tahun Sebelumnya' as data_status FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT *, 'Data Default (Semua 0)' as data_status FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        else:
+            # Query untuk agregasi provinsi (semua kabupaten)
+            query = """
+            WITH requested_time AS (
+                SELECT 
+                    :province as kd_prov_req,
+                    :year as year_req,
+                    :month as month_req
+            ),
+            combined_data AS (
+                SELECT 
+                    hf.kd_prov,
+                    mp.provinsi AS province,
+                    NULL as kd_kab,
+                    NULL as kd_kec,
+                    'Semua Kabupaten/Kota' AS city,
+                    'Semua Kecamatan' AS district,
+                    mhfm.tahun AS year,
+                    mhfm.bulan AS month,
+                    mhfm.status AS status,
+                    SUM(COALESCE(mhfm.tot_pos, 0)) AS tot_pos,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_mikroskop, 0)) as konfirmasi_lab_mikroskop,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_rdt, 0)) as konfirmasi_lab_rdt,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_pcr, 0)) as konfirmasi_lab_pcr,
+                    SUM(COALESCE(mhfm.pos_0_4, 0)) as pos_0_4,
+                    SUM(COALESCE(mhfm.pos_5_14, 0)) as pos_5_14,
+                    SUM(COALESCE(mhfm.pos_15_64, 0)) as pos_15_64,
+                    SUM(COALESCE(mhfm.pos_diatas_64, 0)) as pos_diatas_64,
+                    SUM(COALESCE(mhfm.hamil_pos, 0)) as hamil_pos,
+                    SUM(COALESCE(mhfm.kematian_malaria, 0)) as kematian_malaria,
+                    SUM(COALESCE(mhfm.obat_standar, 0)) as obat_standar,
+                    SUM(COALESCE(mhfm.obat_nonprogram, 0)) as obat_nonprogram,
+                    SUM(COALESCE(mhfm.obat_primaquin, 0)) as obat_primaquin,
+                    SUM(COALESCE(mhfm.p_pf, 0)) as p_pf,
+                    SUM(COALESCE(mhfm.p_pv, 0)) as p_pv,
+                    SUM(COALESCE(mhfm.p_po, 0)) as p_po,
+                    SUM(COALESCE(mhfm.p_pm, 0)) as p_pm,
+                    SUM(COALESCE(mhfm.p_pk, 0)) as p_pk,
+                    SUM(COALESCE(mhfm.p_mix, 0)) as p_mix,
+                    SUM(COALESCE(mhfm.p_suspek_pk, 0)) as p_suspek_pk,
+                    SUM(COALESCE(mhfm.p_others, 0)) as p_others,
+                    SUM(COALESCE(mhfm.penularan_indigenus, 0)) as penularan_indigenus,
+                    SUM(COALESCE(mhfm.penularan_impor, 0)) as penularan_impor,
+                    SUM(COALESCE(mhfm.penularan_induced, 0)) as penularan_induced,
+                    SUM(COALESCE(mhfm.relaps, 0)) as relaps
+                FROM 
+                    healthfacility hf
+                LEFT JOIN 
+                    masterkec mkec ON hf.kd_kec = mkec.kd_kec
+                LEFT JOIN 
+                    masterkab mk ON hf.kd_kab = mk.kd_kab
+                LEFT JOIN 
+                    masterprov mp ON hf.kd_prov = mp.kd_prov
+                LEFT JOIN 
+                    (
+                    SELECT * FROM malariamonthly
+                    WHERE tahun = :year AND bulan = :month
+                    ) mhfm ON hf.id_faskes = mhfm.id_faskes
+                WHERE
+                    hf.kd_prov = :province
+                GROUP BY 
+                    hf.kd_prov, mp.provinsi, 
+                    mhfm.tahun, mhfm.bulan, mhfm.status
+            ),
+            check_current_data AS (
+                SELECT COUNT(*) as count
+                FROM combined_data
+                WHERE year IS NOT NULL
+            ),
+            previous_year_data AS (
+                SELECT 
+                    hf.kd_prov,
+                    mp.provinsi AS province,
+                    NULL as kd_kab,
+                    NULL as kd_kec,
+                    'Semua Kabupaten/Kota' AS city,
+                    'Semua Kecamatan' AS district,
+                    :year as year,
+                    :month as month,
+                    mhfm.status AS status,
+                    SUM(COALESCE(mhfm.tot_pos, 0)) AS tot_pos,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_mikroskop, 0)) as konfirmasi_lab_mikroskop,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_rdt, 0)) as konfirmasi_lab_rdt,
+                    SUM(COALESCE(mhfm.konfirmasi_lab_pcr, 0)) as konfirmasi_lab_pcr,
+                    SUM(COALESCE(mhfm.pos_0_4, 0)) as pos_0_4,
+                    SUM(COALESCE(mhfm.pos_5_14, 0)) as pos_5_14,
+                    SUM(COALESCE(mhfm.pos_15_64, 0)) as pos_15_64,
+                    SUM(COALESCE(mhfm.pos_diatas_64, 0)) as pos_diatas_64,
+                    SUM(COALESCE(mhfm.hamil_pos, 0)) as hamil_pos,
+                    SUM(COALESCE(mhfm.kematian_malaria, 0)) as kematian_malaria,
+                    SUM(COALESCE(mhfm.obat_standar, 0)) as obat_standar,
+                    SUM(COALESCE(mhfm.obat_nonprogram, 0)) as obat_nonprogram,
+                    SUM(COALESCE(mhfm.obat_primaquin, 0)) as obat_primaquin,
+                    SUM(COALESCE(mhfm.p_pf, 0)) as p_pf,
+                    SUM(COALESCE(mhfm.p_pv, 0)) as p_pv,
+                    SUM(COALESCE(mhfm.p_po, 0)) as p_po,
+                    SUM(COALESCE(mhfm.p_pm, 0)) as p_pm,
+                    SUM(COALESCE(mhfm.p_pk, 0)) as p_pk,
+                    SUM(COALESCE(mhfm.p_mix, 0)) as p_mix,
+                    SUM(COALESCE(mhfm.p_suspek_pk, 0)) as p_suspek_pk,
+                    SUM(COALESCE(mhfm.p_others, 0)) as p_others,
+                    SUM(COALESCE(mhfm.penularan_indigenus, 0)) as penularan_indigenus,
+                    SUM(COALESCE(mhfm.penularan_impor, 0)) as penularan_impor,
+                    SUM(COALESCE(mhfm.penularan_induced, 0)) as penularan_induced,
+                    SUM(COALESCE(mhfm.relaps, 0)) as relaps
+                FROM 
+                    healthfacility hf
+                LEFT JOIN 
+                    masterkec mkec ON hf.kd_kec = mkec.kd_kec
+                LEFT JOIN 
+                    masterkab mk ON hf.kd_kab = mk.kd_kab
+                LEFT JOIN 
+                    masterprov mp ON hf.kd_prov = mp.kd_prov
+                LEFT JOIN 
+                    (
+                    SELECT * FROM malariamonthly
+                    WHERE tahun = :year - 1 AND bulan = :month
+                    ) mhfm ON hf.id_faskes = mhfm.id_faskes
+                WHERE
+                    hf.kd_prov = :province
+                GROUP BY 
+                    hf.kd_prov, mp.provinsi, 
+                    mhfm.status
+            ),
+            check_previous_year_data AS (
+                SELECT COUNT(*) as count
+                FROM previous_year_data
+                WHERE status IS NOT NULL
+            ),
+            default_data AS (
+                SELECT
+                    :province as kd_prov,
+                    NULL as kd_kab,
+                    NULL as kd_kec,
+                    (SELECT mp.provinsi FROM masterprov mp WHERE mp.kd_prov = :province) as province,
+                    'Semua Kabupaten/Kota' as city,
+                    'Semua Kecamatan' as district,
+                    :year as year,
+                    :month as month,
+                    'no data' as status,
+                    0 as tot_pos,
+                    0 as konfirmasi_lab_mikroskop,
+                    0 as konfirmasi_lab_rdt,
+                    0 as konfirmasi_lab_pcr,
+                    0 as pos_0_4,
+                    0 as pos_5_14,
+                    0 as pos_15_64,
+                    0 as pos_diatas_64,
+                    0 as hamil_pos,
+                    0 as kematian_malaria,
+                    0 as obat_standar,
+                    0 as obat_nonprogram,
+                    0 as obat_primaquin,
+                    0 as p_pf,
+                    0 as p_pv,
+                    0 as p_po,
+                    0 as p_pm,
+                    0 as p_pk,
+                    0 as p_mix,
+                    0 as p_suspek_pk,
+                    0 as p_others,
+                    0 as penularan_indigenus,
+                    0 as penularan_impor,
+                    0 as penularan_induced,
+                    0 as relaps
+            )
+		    SELECT * FROM (
+                SELECT *, 'Data Aktual/Prediksi' as data_status FROM combined_data
+                WHERE year IS NOT NULL AND (SELECT count FROM check_current_data) > 0
+                
+                UNION ALL
+                
+                SELECT *, 'Data Tahun Sebelumnya' as data_status FROM previous_year_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) > 0
+                
+                UNION ALL
+                
+                SELECT *, 'Data Default (Semua 0)' as data_status FROM default_data
+                WHERE (SELECT count FROM check_current_data) = 0 
+                AND (SELECT count FROM check_previous_year_data) = 0
+            ) final_data
+            LIMIT 1;
+            """
+        
+        # Eksekusi query dengan parameter
+        params = {
+            'province': province,
+            'city': city,
+            'district': district,
+            'year': year,
+            'month': month
+        }
+        
+        # Jalankan query dan dapatkan hasil sebagai dict
+        result = db.session.execute(text(query), params).fetchone()
+        
+        if result:
+            # Konversi hasil query menjadi dictionary
+            # Pendekatan 1: Menggunakan _asdict() jika tersedia
+            try:
+                data = result._asdict()
+            except AttributeError:
+                # Pendekatan 2: Menggunakan dict(zip()) dengan kolom
+                column_names = result._fields if hasattr(result, '_fields') else result.keys()
+                data = dict(zip(column_names, result))
+            
+            # Tambahkan metadata dari parameter asli
+            data['request_parameters'] = {
+                'province': province,
+                'city': city,
+                'district': district,
+                'month_year': month_year
+            }
+            
+            return jsonify(data)
+        else:
+            return jsonify({"error": "Data tidak ditemukan"}), 404
+            
+    except Exception as e:
+        # Log error untuk debugging
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"error": f"Terjadi kesalahan: {str(e)}"}), 500
     finally:
         db.session.close()
