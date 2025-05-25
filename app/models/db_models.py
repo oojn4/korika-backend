@@ -133,7 +133,6 @@ class HealthFacility(BaseModel):
     
     # Relationships
     malaria_reports = db.relationship('MalariaMonthly', backref='facility', lazy=True)
-    env_factors = db.relationship('SocioEnvironmentalFactorsMonthly', backref='facility', lazy=True)
     
     def to_dict(self):
         return {
@@ -246,61 +245,6 @@ class MalariaMonthly(BaseModel):
     
     def __repr__(self):
         return f'<MalariaMonthly {self.id_faskes} {self.bulan}/{self.tahun}>'
-
-# Socio-Environmental Factors Monthly Table
-class SocioEnvironmentalFactorsMonthly(BaseModel):
-    __tablename__ = 'socioenvironmentalfactorsmonthly'
-    
-    id_env_factor = db.Column(db.Integer, primary_key=True)
-    id_faskes = db.Column(db.Integer, db.ForeignKey('healthfacility.id_faskes'), nullable=False)
-    bulan = db.Column(db.Integer, nullable=False)
-    tahun = db.Column(db.Integer, nullable=False)
-    hujan_hujan_mean = db.Column(db.Float)
-    hujan_hujan_max = db.Column(db.Float)
-    hujan_hujan_min = db.Column(db.Float)
-    tm_tm_mean = db.Column(db.Float)
-    tm_tm_max = db.Column(db.Float)
-    tm_tm_min = db.Column(db.Float)
-    rh_mean = db.Column(db.Float)
-    rh_max = db.Column(db.Float)
-    rh_min = db.Column(db.Float)
-    ss_monthly_mean = db.Column(db.Float)
-    ff_x_monthly_mean = db.Column(db.Float)
-    ddd_x_monthly_mean = db.Column(db.Float)
-    ff_avg_monthly_mean = db.Column(db.Float)
-    
-    __table_args__ = (
-        db.UniqueConstraint('id_env_factor', 'id_faskes', 'bulan', 'tahun', name='uk_env_factors_monthly_new'),
-    )
-    
-    def to_dict(self):
-        return {
-            'id_env_factor': self.id_env_factor,
-            'id_faskes': self.id_faskes,
-            'bulan': self.bulan,
-            'tahun': self.tahun,
-            'hujan_hujan_mean': self.hujan_hujan_mean,
-            'hujan_hujan_max': self.hujan_hujan_max,
-            'hujan_hujan_min': self.hujan_hujan_min,
-            'tm_tm_mean': self.tm_tm_mean,
-            'tm_tm_max': self.tm_tm_max,
-            'tm_tm_min': self.tm_tm_min,
-            'rh_mean': self.rh_mean,
-            'rh_max': self.rh_max,
-            'rh_min': self.rh_min,
-            'ss_monthly_mean': self.ss_monthly_mean,
-            'ff_x_monthly_mean': self.ff_x_monthly_mean,
-            'ddd_x_monthly_mean': self.ddd_x_monthly_mean,
-            'ff_avg_monthly_mean': self.ff_avg_monthly_mean,
-            'created_at': self.created_at,
-            'updated_at': self.updated_at,
-            'created_by': self.created_by,
-            'updated_by': self.updated_by
-        }
-    
-    def __repr__(self):
-        return f'<EnvFactors {self.id_faskes} {self.bulan}/{self.tahun}>'
-
 # User Table
 class User(db.Model):
     __tablename__ = 'users'
@@ -372,7 +316,7 @@ class Population(BaseModel):
 class DBD(BaseModel):
     __tablename__ = 'dbd'
     
-    id_dbd = db.Column(db.Integer, primary_key=True)
+    id_dbd = db.Column(db.Integer, primary_key=True, autoincrement=True)
     kd_prov = db.Column(db.String(10), db.ForeignKey('masterprov.kd_prov'), nullable=False)
     kd_kab = db.Column(db.String(10), db.ForeignKey('masterkab.kd_kab'), nullable=False)
     tahun = db.Column(db.Integer, nullable=False)
@@ -382,8 +326,8 @@ class DBD(BaseModel):
     status = db.Column(db.String(50))
     
     __table_args__ = (
-        db.UniqueConstraint('id_dbd', 'bulan', 'tahun', 'status', name='uk_dbd'),
-    )
+    db.UniqueConstraint('kd_prov', 'kd_kab', 'bulan', 'tahun', 'status', name='uk_dbd_location_time_status'),
+)
     
     def to_dict(self):
         return {
@@ -408,7 +352,7 @@ class DBD(BaseModel):
 class Lepto(BaseModel):
     __tablename__ = 'lepto'
     
-    id_lepto = db.Column(db.Integer, primary_key=True)
+    id_lepto = db.Column(db.Integer, primary_key=True, autoincrement=True)
     kd_prov = db.Column(db.String(10), db.ForeignKey('masterprov.kd_prov'), nullable=False)
     kd_kab = db.Column(db.String(10), db.ForeignKey('masterkab.kd_kab'), nullable=False)
     tahun = db.Column(db.Integer, nullable=False)
@@ -418,7 +362,7 @@ class Lepto(BaseModel):
     status = db.Column(db.String(50))
     
     __table_args__ = (
-        db.UniqueConstraint('id_lepto', 'bulan', 'tahun', 'status', name='uk_lepto'),
+        db.UniqueConstraint('kd_prov', 'kd_kab', 'bulan', 'tahun', 'status', name='uk_lepto'),
     )
     
     def to_dict(self):

@@ -13,8 +13,8 @@ from app.models.db_models import (
     
     # Disease report models
     MalariaMonthly,
-    SocioEnvironmentalFactorsMonthly,
     Population,
     DBD,
-    Lepto
+    Lepto,
+    ClimateMonthly
 )

@@ -1,8 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.services.admin import UserService
-
-from app.models import User
+from app.services.user import UserService
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # Blueprint dan routing untuk User
